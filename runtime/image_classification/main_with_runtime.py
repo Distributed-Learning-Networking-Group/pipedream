@@ -1,8 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
-
-import sgd
-import runtime
+from .. import sgd
+from .. import runtime
 import numpy
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -26,8 +25,6 @@ import threading
 import argparse
 import numpy as np
 import random
-
-sys.path.append("..")
 
 
 EVENT = threading.Event()
