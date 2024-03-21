@@ -7,8 +7,8 @@ import torch
 class Stage1(torch.nn.Module):
     def __init__(self):
         super(Stage1, self).__init__()
-        self.layer1 = torch.nn.ReLU(inplace=True)
-        self.layer2 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+        # self.layer1 = torch.nn.ReLU(inplace=True)
+        # self.layer2 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
         self.layer3 = torch.nn.Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
         self.layer4 = torch.nn.ReLU(inplace=True)
         self.layer5 = torch.nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
@@ -36,15 +36,15 @@ class Stage1(torch.nn.Module):
         self.layer29 = torch.nn.Linear(in_features=4096, out_features=4096, bias=True)
         self.layer30 = torch.nn.ReLU(inplace=True)
         self.layer31 = torch.nn.Dropout(p=0.5)
-        self.layer32 = torch.nn.Linear(in_features=4096, out_features=1000, bias=True)
+        self.layer32 = torch.nn.Linear(in_features=4096, out_features=10, bias=True)
 
         self._initialize_weights()
 
     def forward(self, input0):
         out0 = input0.clone()
-        out1 = self.layer1(out0)
-        out2 = self.layer2(out1)
-        out3 = self.layer3(out2)
+        # out1 = self.layer1(out0)
+        # out2 = self.layer2(out1)
+        out3 = self.layer3(out0)
         out4 = self.layer4(out3)
         out5 = self.layer5(out4)
         out6 = self.layer6(out5)

@@ -17,3 +17,6 @@ def model(criterion):
 
 def full_model():
     return VGG16Split()
+
+
+

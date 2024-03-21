@@ -8,11 +8,43 @@ from collections import OrderedDict
 import csv
 import math
 import os
-
+import numpy
 import sys
 sys.path.append("..")
 import graph
 import utils
+w=numpy.zeros((200,10,10,10))
+data_size=[]
+transfer_channel=[]
+process_time=[]
+time_allreduce=[]
+M=1000
+def compute_stage_partition(DNN_GRAPH,GPUS,DNN,layers,n_gpus,stages,replicate_times):
+    if layers<replicate_times or n_gpus<replicate_times:
+        return float('inf'),[],None
+    if stages==1 and replicate_times==n_gpus:
+        for i in range(layers):
+            w[layers][stages][replicate_times][n_gpus]+=DNN[i]
+    else:
+        if stages==1 or replicate_times==n_gpus:
+            return float('inf'),[],None
+    min_max_time=float('inf')
+    for L in range(1,layers):
+        for R in range(1,n_gpus-replicate_times):
+            w[L][stages-1][R][n_gpus-replicate_times],Sets,F_match=compute_stage_partition(DNN_GRAPH,GPUS,
+            L,n_gpus-replicate_times,stages-1,R)
+            communication_time=M*(data_size/transfer_channel)
+            process_times=0
+            for i in range(L+1,layers+1):
+                process_times+=process_time[i]
+            rest_time=M*process_times+time_allreduce
+            max_time=max(w[L][stages-1][R][n_gpus-replicate_times],communication_time,rest_time)
+            if max_time<min_max_time:
+                min_max_time=max_time
+                s=list(range(L+1,layers))
+                Sets=[Sets]+[s]
+    return min_max_time,Sets,F_match
+
 
 def compute_partitioning(compute_times, activation_sizes, parameter_sizes,
                          output_activation_sizes, all_predecessor_ids,

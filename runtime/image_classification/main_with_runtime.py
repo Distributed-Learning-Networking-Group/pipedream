@@ -1,31 +1,49 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import argparse
-from collections import OrderedDict
-import importlib
-import json
-import os
-import shutil
-import sys
-import time
-
-import torch
-from torch.autograd import Variable
-import torch.nn as nn
-import torch.nn.parallel
-import torch.backends.cudnn as cudnn
-import torch.distributed as dist
-import torch.optim
-import torch.utils.data
-import torch.utils.data.distributed
-import torchvision.transforms as transforms
+import numpy
 import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+import torch.utils.data.distributed
+import torch.utils.data
+import torch.optim
+import torch.backends.cudnn as cudnn
+import torch.nn.parallel
+import torch.nn as nn
+from torch.autograd import Variable
+import torch
+import copy
+import time
+import sys
+import shutil
+import os
+import json
+import importlib
+from collections import OrderedDict
+import threading
+import argparse
+import numpy as np
+import random
 
 sys.path.append("..")
 import runtime
 import sgd
 
+
+EVENT = threading.Event()
+EVENT1 = threading.Event()
+
+
+def setup_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+
+
+# 设置随机数种子
+setup_seed(2)
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('--data_dir', type=str,
                     help='path to dataset')
@@ -43,7 +61,7 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--eval-batch-size', default=100, type=int,
                     help='eval mini-batch size (default: 100)')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--lr_policy', default='step', type=str,
                     help='policy for controlling learning rate')
@@ -75,7 +93,7 @@ parser.add_argument('--num_minibatches', default=None, type=int,
                     help="Number of minibatches to run")
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-parser.add_argument('--checkpoint_dir', default='', type=str, metavar='PATH',
+parser.add_argument('--checkpoint_dir', default='/home/chenyuxin/yzy/pipedream-pipedream/pipedream-pipedream/runtime/image_classification/output/', type=str, metavar='PATH',
                     help='path to directory to save checkpoints')
 parser.add_argument('--checkpoint_dir_not_nfs', action='store_true',
                     help='checkpoint dir is not on a shared NFS server')
@@ -85,6 +103,12 @@ parser.add_argument('-v', '--verbose_frequency', default=0, type=int, metavar='N
                     help="Log verbose information")
 parser.add_argument('--num_ranks_in_server', default=1, type=int,
                     help="number of gpus per machine")
+parser.add_argument('--partition', default=None, type=str,
+                    help="Path of partition configuration file")
+parser.add_argument('--worker_num_sum', default=1, type=int,
+                    help="number of gpus")
+parser.add_argument('--present_stage_id', default=0, type=int,
+                    help="stage_id")
 # Recompute tensors from forward pass, instead of saving them.
 parser.add_argument('--recompute', action='store_true',
                     help='Recompute tensors in backward pass')
@@ -94,20 +118,35 @@ parser.add_argument('--macrobatch', action='store_true',
                     help='Macrobatch updates to save memory')
 
 best_prec1 = 0
-
-
+batch_list_all = []
+forward_list = []
+backward_list = []
+full_batch_time = []
+list12 = []
+list34 = []
+list56 = []
+list78 = []
+list910 = []
+list_rec = []
+list_send = []
 # Helper methods.
+
+
 def is_first_stage():
     return args.stage is None or (args.stage == 0)
+
 
 def is_last_stage():
     return args.stage is None or (args.stage == (args.num_stages-1))
 
 # Synthetic Dataset class.
+
+
 class SyntheticDataset(torch.utils.data.dataset.Dataset):
     def __init__(self, input_size, length, num_classes=1000):
         self.tensor = Variable(torch.rand(*input_size)).type(torch.FloatTensor)
-        self.target = torch.Tensor(1).random_(0, num_classes)[0].type(torch.LongTensor)
+        self.target = torch.Tensor(1).random_(0, num_classes)[
+            0].type(torch.LongTensor)
         self.length = length
 
     def __getitem__(self, index):
@@ -115,6 +154,10 @@ class SyntheticDataset(torch.utils.data.dataset.Dataset):
 
     def __len__(self):
         return self.length
+
+
+args = parser.parse_args()
+
 
 def main():
     global args, best_prec1
@@ -125,25 +168,91 @@ def main():
     # define loss function (criterion)
     criterion = nn.CrossEntropyLoss()
 
-    # create stages of the model
+    # create s of the model
     module = importlib.import_module(args.module)
-    args.arch = module.arch()
-    model = module.model(criterion)
+    partition = json.load(open(args.partition, 'r'))
+    worker_num_sum = args.worker_num_sum
 
+    args.arch = module.arch()
+    # model = module.model(criterion)
+
+    args.batch_size_for_communication = partition["batch_size_all"][0]
+    args.batch_size = partition["batch_size"][args.present_stage_id]
+    # model_vgg=module.model_vgg16(criterion,[3,35], [0,0,0,0])
+
+    # model = module.model_vgg16(criterion, partition["partition"], partition["recompute_ratio"])
+    setup_seed(2)
+    model_vgg = module.model_vgg16(
+        criterion, partition["partition"], partition["recompute_ratio"])
+    # print("model")
+    # print(model)
+    # print("model_vgg")
+    # print(model_vgg)
     # determine shapes of all tensors in passed-in model
     if args.arch == 'inception_v3':
         input_size = [args.batch_size, 3, 299, 299]
     else:
         input_size = [args.batch_size, 3, 224, 224]
-    training_tensor_shapes = {"input0": input_size, "target": [args.batch_size]}
+    training_tensor_shapes = {
+        "input0": input_size, "target": [args.batch_size]}
     dtypes = {"input0": torch.int64, "target": torch.int64}
     inputs_module_destinations = {"input": 0}
     target_tensor_names = {"target"}
-    for (stage, inputs, outputs) in model[:-1]:  # Skip last layer (loss).
+
+    training_tensor_shapes1 = {
+        "input0": input_size, "target": [args.batch_size]}
+    dtypes1 = {"input0": torch.float32, "target": torch.int64}
+    inputs_module_destinations1 = {"input": 0}
+
+    # for (stage, inputs, outputs) in model[:-1]:  # Skip last layer (loss).
+    #
+    #     input_tensors = []
+    #
+    #     for input in inputs:
+    #         input_tensor = torch.zeros(tuple(training_tensor_shapes[input]),
+    #                                    dtype=torch.float32)
+    #         input_tensors.append(input_tensor)
+    #     with torch.no_grad():
+    #         output_tensors = stage(*tuple(input_tensors))
+    #     if not type(output_tensors) is tuple:
+    #         output_tensors = [output_tensors]
+    #     for output, output_tensor in zip(outputs,
+    #                                      list(output_tensors)):
+    #         training_tensor_shapes[output] = list(output_tensor.size())
+    #         dtypes[output] = output_tensor.dtype
+    #
+    # eval_tensor_shapes = {}
+    # for key in training_tensor_shapes:
+    #     eval_tensor_shapes[key] = tuple(
+    #         [args.eval_batch_size] + training_tensor_shapes[key][1:])
+    #     training_tensor_shapes[key] = tuple(
+    #         training_tensor_shapes[key])
+
+    # Skip last layer (loss).
+    for module_id, (stage, inputs, outputs) in enumerate(model_vgg[:-1]):
+        # if module_id==0:
+        #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 0)
+        #     assert os.path.isfile(checkpoint_file_path)
+        #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
+        #     checkpoint = torch.load(checkpoint_file_path)
+        #     stage.load_state_dict(checkpoint['state_dict'], strict=True)
+        #     print("=> loaded checkpoint '{}' (epoch {})"
+        #           .format(checkpoint_file_path, checkpoint['epoch']))
+        # if module_id==1:
+        #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 1)
+        #     assert os.path.isfile(checkpoint_file_path)
+        #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
+        #     checkpoint = torch.load(checkpoint_file_path)
+        #     stage.load_state_dict(checkpoint['state_dict'], strict=True)
+        #     print("=> loaded checkpoint '{}' (epoch {})"
+        #           .format(checkpoint_file_path, checkpoint['epoch']))
         input_tensors = []
-        for input in inputs:
-            input_tensor = torch.zeros(tuple(training_tensor_shapes[input]),
-                                       dtype=torch.float32)
+        for module_input in inputs:
+            if module_input in inputs_module_destinations1:
+                inputs_module_destinations1[module_input] = module_id
+
+            input_tensor = torch.ones(tuple(training_tensor_shapes1[module_input]),
+                                      dtype=dtypes1[module_input])
             input_tensors.append(input_tensor)
         with torch.no_grad():
             output_tensors = stage(*tuple(input_tensors))
@@ -151,15 +260,15 @@ def main():
             output_tensors = [output_tensors]
         for output, output_tensor in zip(outputs,
                                          list(output_tensors)):
-            training_tensor_shapes[output] = list(output_tensor.size())
-            dtypes[output] = output_tensor.dtype
+            training_tensor_shapes1[output] = list(output_tensor.size())
+            dtypes1[output] = output_tensor.dtype
 
     eval_tensor_shapes = {}
-    for key in training_tensor_shapes:
+    for key in training_tensor_shapes1:
         eval_tensor_shapes[key] = tuple(
-            [args.eval_batch_size] + training_tensor_shapes[key][1:])
-        training_tensor_shapes[key] = tuple(
-            training_tensor_shapes[key])
+            training_tensor_shapes1[key])
+        training_tensor_shapes1[key] = tuple(
+            training_tensor_shapes1[key])
 
     configuration_maps = {
         'module_to_stage_map': None,
@@ -168,18 +277,25 @@ def main():
     }
     if args.config_path is not None:
         json_config_file = json.load(open(args.config_path, 'r'))
-        configuration_maps['module_to_stage_map'] = json_config_file.get("module_to_stage_map", None)
-        configuration_maps['stage_to_rank_map'] = json_config_file.get("stage_to_rank_map", None)
+        configuration_maps['module_to_stage_map'] = json_config_file.get(
+            "module_to_stage_map", None)
+        configuration_maps['stage_to_rank_map'] = json_config_file.get(
+            "stage_to_rank_map", None)
         configuration_maps['stage_to_rank_map'] = {
             int(k): v for (k, v) in configuration_maps['stage_to_rank_map'].items()}
-        configuration_maps['stage_to_depth_map'] = json_config_file.get("stage_to_depth_map", None)
-
+        configuration_maps['stage_to_depth_map'] = json_config_file.get(
+            "stage_to_depth_map", None)
+    print("shape")
+    # print(training_tensor_shapes)
+    print(training_tensor_shapes1)
+    # if args.present_stage_id==1:
+    #     args.loss_scale=float(1/3)
     r = runtime.StageRuntime(
-        model=model, distributed_backend=args.distributed_backend,
+        model=model_vgg, distributed_backend=args.distributed_backend,
         fp16=args.fp16, loss_scale=args.loss_scale,
-        training_tensor_shapes=training_tensor_shapes,
+        training_tensor_shapes=training_tensor_shapes1,
         eval_tensor_shapes=eval_tensor_shapes,
-        training_tensor_dtypes=dtypes,
+        training_tensor_dtypes=dtypes1,
         inputs_module_destinations=inputs_module_destinations,
         target_tensor_names=target_tensor_names,
         configuration_maps=configuration_maps,
@@ -188,7 +304,16 @@ def main():
         num_ranks_in_server=args.num_ranks_in_server,
         verbose_freq=args.verbose_frequency,
         model_type=runtime.IMAGE_CLASSIFICATION,
-        enable_recompute=args.recompute)
+        event=EVENT,
+        event1=EVENT1,
+        worker_num_sum=worker_num_sum,
+        batch_size=args.batch_size,
+        # 总共的batch_size大小，所有的stage该数值相同
+        batch_size_for_communication=args.batch_size_for_communication,
+        stage_num=2,
+        stage_nums=partition["partition"],
+        enable_recompute=args.recompute
+    )
 
     # stage needed to determine if current stage is the first stage
     # num_stages needed to determine if current stage is the last stage
@@ -217,7 +342,7 @@ def main():
         best_prec1 = checkpoint['best_prec1']
         r.load_state_dict(checkpoint['state_dict'])
         print("=> loaded checkpoint '{}' (epoch {})"
-                .format(checkpoint_file_path, checkpoint['epoch']))
+              .format(checkpoint_file_path, checkpoint['epoch']))
 
     optimizer = sgd.SGDWithWeightStashing(r.modules(), r.master_parameters,
                                           r.model_parameters, args.loss_scale,
@@ -227,7 +352,6 @@ def main():
                                           weight_decay=args.weight_decay,
                                           verbose_freq=args.verbose_frequency,
                                           macrobatch=args.macrobatch)
-
     if args.resume:
         optimizer.load_state_dict(checkpoint['optimizer'])
 
@@ -251,35 +375,40 @@ def main():
                 ])
             )
     else:
+        import torchvision
         if args.synthetic_data:
             train_dataset = SyntheticDataset((3, 224, 224), 1000000)
         else:
             traindir = os.path.join(args.data_dir, 'train')
-            train_dataset = datasets.ImageFolder(
-                traindir,
-                transforms.Compose([
-                    transforms.RandomResizedCrop(224),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-                    normalize,
-                ]))
+            train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True,
+                                                         transform=transforms.Compose([
+                                                             transforms.Resize(
+                                                                 (224, 224)),
+                                                             transforms.ToTensor(),
+                                                             transforms.Normalize(
+                                                                 (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                                         ]))
 
+    args.synthetic_data = False
     if args.synthetic_data:
-        val_dataset = SyntheticDataset((3, 224, 224), 10000)
+        val_dataset = SyntheticDataset((3, 224, 224), 1000)
     else:
         valdir = os.path.join(args.data_dir, 'val')
-        val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ]))
+        val_dataset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                                   download=True, transform=transforms.Compose([
+                                                       transforms.Resize(
+                                                           (224, 224)),
+                                                       transforms.ToTensor(),
+                                                       transforms.Normalize(
+                                                           (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                                   ]))
 
     distributed_sampler = False
     train_sampler = None
     val_sampler = None
     if configuration_maps['stage_to_rank_map'] is not None:
-        num_ranks_in_first_stage = len(configuration_maps['stage_to_rank_map'][0])
+        num_ranks_in_first_stage = len(
+            configuration_maps['stage_to_rank_map'][0])
         if num_ranks_in_first_stage > 1:
             train_sampler = torch.utils.data.distributed.DistributedSampler(
                 train_dataset, num_replicas=num_ranks_in_first_stage,
@@ -290,19 +419,129 @@ def main():
             distributed_sampler = True
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
-
+        train_dataset, batch_size=args.batch_size, shuffle=(
+            train_sampler is None),
+        num_workers=4, pin_memory=True, sampler=train_sampler, drop_last=True)
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=args.eval_batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True, sampler=val_sampler, drop_last=True)
+        num_workers=4, pin_memory=True, sampler=val_sampler, drop_last=True)
 
     # if checkpoint is loaded, start by running validation
     if args.resume:
         assert args.start_epoch > 0
         validate(val_loader, r, args.start_epoch-1)
+    # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
+        # print(r.state_dict()['module0'])
+        if epoch == -1:
+            print("partition", r.stage_nums)
+            # model_vgg = module.model_vgg16(criterion, r.stage_nums.numpy().tolist(), [0, 0])
+            model_vgg = module.model_vgg16(criterion, [10, 8, 10, 10], [0, 0])
+            training_tensor_shapes1 = {
+                "input0": input_size, "target": [args.batch_size]}
+            dtypes1 = {"input0": torch.float32, "target": torch.int64}
+            # Skip last layer (loss).
+            for module_id, (stage, inputs, outputs) in enumerate(model_vgg[:-1]):
+                input_tensors = []
+                for module_input in inputs:
+                    if module_input in inputs_module_destinations1:
+                        inputs_module_destinations1[module_input] = module_id
+
+                    input_tensor = torch.ones(tuple(training_tensor_shapes1[module_input]),
+                                              dtype=dtypes1[module_input])
+                    input_tensors.append(input_tensor)
+                with torch.no_grad():
+                    output_tensors = stage(*tuple(input_tensors))
+                if not type(output_tensors) is tuple:
+                    output_tensors = [output_tensors]
+                for output, output_tensor in zip(outputs,
+                                                 list(output_tensors)):
+                    training_tensor_shapes1[output] = list(
+                        output_tensor.size())
+                    dtypes1[output] = output_tensor.dtype
+
+            eval_tensor_shapes = {}
+            for key in training_tensor_shapes1:
+                eval_tensor_shapes[key] = tuple(
+                    training_tensor_shapes1[key])
+                training_tensor_shapes1[key] = tuple(
+                    training_tensor_shapes1[key])
+            r.initialize1(model_vgg, inputs_module_destinations, configuration_maps,
+                          args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server,
+                          training_tensor_shapes1, dtypes1)
+            torch.distributed.barrier()
+            # save_checkpoint({
+            #     'epoch': epoch + 1,
+            #     'arch': args.arch,
+            #     'state_dict': r.state_dict(),
+            #     'best_prec1': best_prec1,
+            #     'optimizer': optimizer.state_dict(),
+            # }, args.checkpoint_dir, r.stage)
+            # for i in range(2):
+            # if r.stage==0:
+            #     # checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 1)
+            #     # print(checkpoint_file_path)
+            #     # assert os.path.isfile(checkpoint_file_path)
+            #     # print("=> loading checkpoint '{}'".format(checkpoint_file_path))
+            #     # checkpoint = torch.load(checkpoint_file_path)
+            #     # print("111111111111111")
+            #     # print("checkpoint",checkpoint['state_dict']['module0'].keys())
+            #     # print("present stage", r.state_dict()['module0'].keys())
+            #     # print("000000000000000")
+            #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 0)
+            #     assert os.path.isfile(checkpoint_file_path)
+            #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
+            #     checkpoint = torch.load(checkpoint_file_path)
+            #     for j, module in enumerate(r.modules_with_dependencies.modules()):
+            #         if j > 0:
+            #             break
+            #         module.load_state_dict(checkpoint['state_dict']["module0"], strict=False)
+            #     print("=> loaded checkpoint '{}' (epoch {})"
+            #           .format(checkpoint_file_path, checkpoint['epoch']))
+            #
+            #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 1)
+            #     assert os.path.isfile(checkpoint_file_path)
+            #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
+            #     checkpoint = torch.load(checkpoint_file_path)
+            #     for j, module in enumerate(r.modules_with_dependencies.modules()):
+            #         if j > 0:
+            #             break
+            #         module.load_state_dict(checkpoint['state_dict']["module0"], strict=False)
+            #     print("=> loaded checkpoint '{}' (epoch {})"
+            #           .format(checkpoint_file_path, checkpoint['epoch']))
+            # if r.stage == 1:
+            #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 0)
+            #     assert os.path.isfile(checkpoint_file_path)
+            #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
+            #     checkpoint = torch.load(checkpoint_file_path)
+            #     for j, module in enumerate(r.modules_with_dependencies.modules()):
+            #         if j > 0:
+            #             break
+            #         module.load_state_dict(checkpoint['state_dict']["module0"], strict=False)
+            #     print("=> loaded checkpoint '{}' (epoch {})"
+            #           .format(checkpoint_file_path, checkpoint['epoch']))
+            #
+            #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 1)
+            #     assert os.path.isfile(checkpoint_file_path)
+            #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
+            #     checkpoint = torch.load(checkpoint_file_path)
+            #     for j, module in enumerate(r.modules_with_dependencies.modules()):
+            #         if j > 0:
+            #             break
+            #         module.load_state_dict(checkpoint['state_dict']["module0"], strict=False)
+            #     print("=> loaded checkpoint '{}' (epoch {})"
+            #           .format(checkpoint_file_path, checkpoint['epoch']))
+            #
+            optimizer = sgd.SGDWithWeightStashing(r.modules(), r.master_parameters,
+                                                  r.model_parameters, args.loss_scale,
+                                                  num_versions=num_versions,
+                                                  lr=args.lr,
+                                                  momentum=args.momentum,
+                                                  weight_decay=args.weight_decay,
+                                                  verbose_freq=args.verbose_frequency,
+                                                  macrobatch=args.macrobatch)
+
         if distributed_sampler:
             train_sampler.set_epoch(epoch)
 
@@ -310,38 +549,56 @@ def main():
         if args.forward_only:
             validate(val_loader, r, epoch)
         else:
-            train(train_loader, r, optimizer, epoch)
+            n_num = epoch*10
+            train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
+                  args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server, training_tensor_shapes1,
+                  dtypes1, target_tensor_names, n_num, model_vgg)
 
             # evaluate on validation set
-            prec1 = validate(val_loader, r, epoch)
-            if r.stage != r.num_stages: prec1 = 0
+            # prec1 = validate(val_loader, r, epoch)
+            prec1 = 0
+            if r.stage != r.num_stages:
+                prec1 = 0
 
+            # validate(val_loader, r, epoch)
             # remember best prec@1 and save checkpoint
             best_prec1 = max(prec1, best_prec1)
 
             should_save_checkpoint = args.checkpoint_dir_not_nfs or r.rank_in_stage == 0
-            if args.checkpoint_dir and should_save_checkpoint:
-                save_checkpoint({
-                    'epoch': epoch + 1,
-                    'arch': args.arch,
-                    'state_dict': r.state_dict(),
-                    'best_prec1': best_prec1,
-                    'optimizer' : optimizer.state_dict(),
-                }, args.checkpoint_dir, r.stage)
+            # should_save_checkpoint=True
+            # if args.checkpoint_dir and should_save_checkpoint:
+            #     save_checkpoint({
+            #         'epoch': epoch + 1,
+            #         'arch': args.arch,
+            #         'state_dict': r.state_dict(),
+            #         'best_prec1': best_prec1,
+            #         'optimizer' : optimizer.state_dict(),
+            #     }, args.checkpoint_dir, r.stage)
 
 
-def train(train_loader, r, optimizer, epoch):
+def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
+          master_addr, rank, local_rank, num_ranks_in_server, training_tensor_shapes1,
+          dtypes1, target_tensor_names, n_num, model1):
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
-
+    Stage_time = AverageMeter_batch()
+    i_for_initial = 0
+    batch_list = []
+    time_for_recieve = 0
+    time_for_send = 0
+    flag = False
     # switch to train mode
-    n = r.num_iterations(loader_size=len(train_loader))
+    # n = r.num_iterations(loader_size=len(train_loader))
+    n = 780
+
     if args.num_minibatches is not None:
         n = min(n, args.num_minibatches)
-    r.train(n)
-    if not is_first_stage(): train_loader = None
+
+    r.train(n, epoch)
+    if not is_first_stage():
+        train_loader = None
     r.set_loader(train_loader)
 
     end = time.time()
@@ -351,22 +608,71 @@ def train(train_loader, r, optimizer, epoch):
         num_warmup_minibatches = 0
     else:
         num_warmup_minibatches = r.num_warmup_minibatches
-
+    print("warm%d" % (num_warmup_minibatches))
     if args.verbose_frequency > 0:
         print("Letting in %d warm-up minibatches" % num_warmup_minibatches)
         print("Running training for %d minibatches" % n)
-
+    batch_begin_time = time.time()
     # start num_warmup_minibatches forward passes
     for i in range(num_warmup_minibatches):
         r.run_forward()
-
+    pre_real = 0.0
+    pre_back = 0.0
     for i in range(n - num_warmup_minibatches):
         # perform forward pass
-        r.run_forward()
+        # if i==100-num_warmup_minibatches and (r.stage==1 or r.stage==2):
+        # if i==i_for_initial+10-num_warmup_minibatches and i_for_initial>0:
+        if i == 150-num_warmup_minibatches and epoch == -1:
+            print("begin")
+            # EVENT.set()
+            r.run_forward(stopped=True)
+            # perform backward pass
+            if args.fp16:
+                r.zero_grad()
+            else:
+                optimizer.zero_grad()
+            optimizer.load_old_params()
+            if num_warmup_minibatches == 0:
+                r.run_backward(stopped=True)
+            else:
+                r.run_backward()
+            optimizer.load_new_params()
+            optimizer.step()
+            for i in range(num_warmup_minibatches):
+                if i == num_warmup_minibatches-1:
+                    optimizer.zero_grad()
+                    optimizer.load_old_params()
+                    r.run_backward(stopped=True)
+                    optimizer.load_new_params()
+                    optimizer.step()
+                else:
+                    optimizer.zero_grad()
+                    optimizer.load_old_params()
+                    r.run_backward()
+                    optimizer.load_new_params()
+                    optimizer.step()
+            # save_checkpoint({
+            #     'epoch': epoch + 1,
+            #     'arch': args.arch,
+            #     'state_dict': r.state_dict(),
+            #     'best_prec1': best_prec1,
+            #     'optimizer': optimizer.state_dict(),
+            # }, args.checkpoint_dir, r.stage)
+            # torch.distributed.barrier()
+            r.wait()
+            EVENT.clear()
+            EVENT1.clear()
+            print("end")
 
-        # Adjust learning rate
-        adjust_learning_rate(optimizer, epoch, args.epochs, r, args.lr_policy, i, n)
-
+            return
+        pre_real += r.real_time
+        pre_back += r.backward_real_time
+        if i == n-num_warmup_minibatches-1:
+            r.run_forward(stopped=True)
+        else:
+            r.run_forward()
+        adjust_learning_rate(optimizer, epoch, args.epochs,
+                             r, args.lr_policy, i, n)
         if is_last_stage():
             # measure accuracy and record loss
             output, target, loss = r.output, r.target, r.loss
@@ -380,8 +686,8 @@ def train(train_loader, r, optimizer, epoch):
             end = time.time()
             epoch_time = (end - epoch_start_time) / 3600.0
             full_epoch_time = (epoch_time / float(i+1)) * float(n)
-
             if i % args.print_freq == 0:
+                full_batch_time.append(batch_time.val)
                 print('Epoch: [{0}][{1}/{2}]\t'
                       'Time: {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Epoch time [hr]: {epoch_time:.3f} ({full_epoch_time:.3f})\t'
@@ -389,42 +695,165 @@ def train(train_loader, r, optimizer, epoch):
                       'Loss: {loss.val:.4f} ({loss.avg:.4f})\t'
                       'Prec@1: {top1.val:.3f} ({top1.avg:.3f})\t'
                       'Prec@5: {top5.val:.3f} ({top5.avg:.3f})'.format(
-                       epoch, i, n, batch_time=batch_time,
-                       epoch_time=epoch_time, full_epoch_time=full_epoch_time,
-                       loss=losses, top1=top1, top5=top5,
-                       memory=(float(torch.cuda.memory_allocated()) / 10**9),
-                       cached_memory=(float(torch.cuda.memory_cached()) / 10**9)))
-                import sys; sys.stdout.flush()
+                          epoch, i, n, batch_time=batch_time,
+                          epoch_time=epoch_time, full_epoch_time=full_epoch_time,
+                          loss=losses, top1=top1, top5=top5,
+                          memory=(float(torch.cuda.memory_allocated()) / 10**9),
+                          cached_memory=(float(torch.cuda.memory_cached()) / 10**9)))
+                import sys
+                sys.stdout.flush()
         else:
+
             if i % args.print_freq == 0:
                 print('Epoch: [{0}][{1}/{2}]\tMemory: {memory:.3f} ({cached_memory:.3f})'.format(
-                       epoch, i, n, memory=(float(torch.cuda.memory_allocated()) / 10**9),
-                       cached_memory=(float(torch.cuda.memory_cached()) / 10**9)))
-                import sys; sys.stdout.flush()
-
+                    epoch, i, n, memory=(
+                        float(torch.cuda.memory_allocated()) / 10**9),
+                    cached_memory=(float(torch.cuda.memory_cached()) / 10**9)))
+                import sys
+                sys.stdout.flush()
         # perform backward pass
         if args.fp16:
             r.zero_grad()
         else:
             optimizer.zero_grad()
         optimizer.load_old_params()
-        r.run_backward()
+        if i == n-num_warmup_minibatches-1 and num_warmup_minibatches == 0:
+            r.run_backward(stopped=True)
+        else:
+            r.run_backward()
+
+        time_for_recieve += r.time12
+        time_for_send += r.time34
+
         optimizer.load_new_params()
         optimizer.step()
+        # if i%50==0:
+        # #     # if r.stage==1 and i==200:
+        # #     #     r.i_for_initial=torch.tensor([210])
+        #
+        #     r.Send_initial(i)
+        #     r.Rec_initial(i)
+        #     i_for_initial=int(r.i_for_initial[0])
+        #     print("i_for_initial",i_for_initial)
+        #     r.status[r.stage]=pre_back+pre_real
+        #     # print("pre back&real",pre_back,pre_real)
+        #     r.Send_Status(i)
+        #     r.Rec_Status(i)
+        #     # if i == 100:
+        #     #     print("finish initialize cal status")
+        #     #     # list_cal=[]
+        #     #     # list_cal.append(sum(r.layer_forward_list[0:int(r.stage_nums[0])+1])+sum(r.layer_backward_list[0:int(r.stage_nums[0])+1]))
+        #     #     # list_cal.append(sum(r.layer_forward_list[int(r.stage_nums[0])+1:int(r.stage_nums[1])+1]) + sum(r.layer_backward_list[int(r.stage_nums[0])+1:int(r.stage_nums[1])+1]))
+        #     #     # r.initial_status_cal = torch.tensor(list_cal)
+        #     #     r.initial_status_cal=
+        #     if i == 100:
+        #         print("finish initialize cmp status")
+        #         r.initial_status_cmp = r.status.clone()
+        #     r.Send_Stage_nums(i)
+        #     r.Rec_Stage_nums(i)
+        #     print(r.status)
+        #     if is_last_stage():
+        #         # r.previous_status=r.status.clone()
+        #         # print("previous",r.previous_status)
+        #         if i > 100:
+        #             r.straggle_for_stage_cmp = r.status / r.initial_status_cmp
+        #             print("straggle_cmp", r.straggle_for_stage_cmp)
+        #     # if is_last_stage() and i>100 and flag==False:
+        #     #     list_index=[]
+        #     #     def if_exist_straggle(straggle_list):
+        #     #         Flag=False
+        #     #         for i in range(len(straggle_list)):
+        #     #             if straggle_list[i]>=1.4 or straggle_list[i]<=0.7:
+        #     #                 list_index.append(i)
+        #     #                 Flag=True
+        #     #         return Flag
+        #     #     if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
+        #     #         flag=True
+        #     #         print("restart")
+        #     #         for j in range(len(list_index)):
+        #     #             r.straggle_for_stage_cal[list_index[j]] = r.straggle_for_stage_cmp[list_index[j]] * r.straggle_for_stage_cal[list_index[j]]
+        #     #         print("straggle_cal", r.straggle_for_stage_cal)
+        #     #         r.i_for_initial[0]=torch.tensor([i+60])
+        #     #         r.stage_nums=torch.tensor([17,21])
+        #     #         # r.stage_nums=torch.tensor(calculate_new_placement(r.layer_forward_list,r.layer_backward_list,r.layer_communication_list,
+        #     #         #                                                   r.straggle_for_stage_cal,r.stage_num,r.stage_nums,10))
+        #     forward_list.append(pre_real)
+        #     backward_list.append(pre_back)
+        #     pre_real = 0
+        #     pre_back = 0
+        #     time_for_recieve=0
+        #     time_for_send=0
+        #     batch_end_time = time.time()
+        #     stage_complete_time = batch_end_time - batch_begin_time
+        #     batch_begin_time=time.time()
+        #     Stage_time.update(stage_complete_time)
+        #     batch_list_all.append(Stage_time.val)
 
+        # if i % 800 == 0:
+        #     def save_list_to_txt(data, filename):
+        #         numpy.savetxt(filename, data)
+        #
+        #     if r.stage == 0:
+        #         save_list_to_txt(forward_list, "data_0_for")
+        #         save_list_to_txt(backward_list, "data_0_bac")
+        #     if r.stage == 1:
+        #         save_list_to_txt(forward_list, "data_1_for")
+        #         save_list_to_txt(backward_list, "data_1_bac")
+        #     if r.stage == 2:
+        #         save_list_to_txt(forward_list, "data_2_for")
+        #         save_list_to_txt(backward_list, "data_2_bac")
+        #     if r.stage == 3:
+        #         save_list_to_txt(forward_list, "data_3_for")
+        #         save_list_to_txt(backward_list, "data_3_bac")
+        #         save_list_to_txt(batch_list_all, "data_batch")
+
+        if i == 500 and epoch == 2:
+            def save_list_to_txt(data, filename):
+                numpy.savetxt(filename, data)
+            if is_last_stage():
+                save_list_to_txt(forward_list, "data1.txt")
+                save_list_to_txt(batch_list_all, "data3_0.txt")
+                save_list_to_txt(backward_list, "data4.txt")
+                save_list_to_txt(full_batch_time, "data6.txt")
+
+                save_list_to_txt(list12, "dataa.txt")
+                save_list_to_txt(list34, "datab.txt")
+                save_list_to_txt(list56, "datac.txt")
+                save_list_to_txt(list78, "datad.txt")
+                save_list_to_txt(list910, "datae.txt")
+
+                save_list_to_txt(list_send, "data_send_1.txt")
+                save_list_to_txt(list_rec, "data_rec_1.txt")
+            if r.stage == 0:
+                save_list_to_txt(forward_list, "data_0_for_.txt")
+                save_list_to_txt(backward_list, "data_0_bac_.txt")
+            if r.stage == 1:
+                save_list_to_txt(forward_list, "data_1_for_.txt")
+                save_list_to_txt(backward_list, "data_1_bac_.txt")
+            if r.stage == 2:
+                save_list_to_txt(forward_list, "data_2_for")
+                save_list_to_txt(backward_list, "data_2_bac")
     # finish remaining backward passes
     for i in range(num_warmup_minibatches):
-        optimizer.zero_grad()
-        optimizer.load_old_params()
-        r.run_backward()
-        optimizer.load_new_params()
-        optimizer.step()
+        if i == num_warmup_minibatches - 1:
+            optimizer.zero_grad()
+            optimizer.load_old_params()
+            r.run_backward(stopped=True)
+            optimizer.load_new_params()
+            optimizer.step()
+        else:
+            optimizer.zero_grad()
+            optimizer.load_old_params()
+            r.run_backward()
+            optimizer.load_new_params()
+            optimizer.step()
 
     # wait for all helper threads to complete
     r.wait()
 
     print("Epoch %d: %.3f seconds" % (epoch, time.time() - epoch_start_time))
-    print("Epoch start time: %.3f, epoch end time: %.3f" % (epoch_start_time, time.time()))
+    print("Epoch start time: %.3f, epoch end time: %.3f" %
+          (epoch_start_time, time.time()))
 
 
 def validate(val_loader, r, epoch):
@@ -437,8 +866,10 @@ def validate(val_loader, r, epoch):
     n = r.num_iterations(loader_size=len(val_loader))
     if args.num_minibatches is not None:
         n = min(n, args.num_minibatches)
-    r.eval(n)
-    if not is_first_stage(): val_loader = None
+
+    r.eval(n, epoch)
+    if not is_first_stage():
+        val_loader = None
     r.set_loader(val_loader)
 
     end = time.time()
@@ -454,13 +885,13 @@ def validate(val_loader, r, epoch):
         print("Running validation for %d minibatches" % n)
 
     with torch.no_grad():
-        for i in range(num_warmup_minibatches):
-            r.run_forward()
+        # for i in range(num_warmup_minibatches):
+        #     r.run_forward()
 
-        for i in range(n - num_warmup_minibatches):
+        for i in range(n):
             # perform forward pass
             r.run_forward()
-            r.run_ack()
+            # r.run_ack()
 
             if is_last_stage():
                 output, target, loss = r.output, r.target, r.loss
@@ -482,37 +913,43 @@ def validate(val_loader, r, epoch):
                           'Loss: {loss.val:.4f} ({loss.avg:.4f})\t'
                           'Prec@1: {top1.val:.3f} ({top1.avg:.3f})\t'
                           'Prec@5: {top5.val:.3f} ({top5.avg:.3f})'.format(
-                           epoch, i, n, batch_time=batch_time, loss=losses,
-                           top1=top1, top5=top5,
-                           memory=(float(torch.cuda.memory_allocated()) / 10**9),
-                           cached_memory=(float(torch.cuda.memory_cached()) / 10**9)))
-                    import sys; sys.stdout.flush()
+                              epoch, i, n, batch_time=batch_time, loss=losses,
+                              top1=top1, top5=top5,
+                              memory=(
+                                  float(torch.cuda.memory_allocated()) / 10**9),
+                              cached_memory=(float(torch.cuda.memory_cached()) / 10**9)))
+                    import sys
+                    sys.stdout.flush()
 
         if is_last_stage():
             print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
+                  .format(top1=top1, top5=top5))
 
-        for i in range(num_warmup_minibatches):
-             r.run_ack()
+        # for i in range(num_warmup_minibatches):
+        #      r.run_ack()
 
         # wait for all helper threads to complete
         r.wait()
 
-        print('Epoch %d: %.3f seconds' % (epoch, time.time() - epoch_start_time))
-        print("Epoch start time: %.3f, epoch end time: %.3f" % (epoch_start_time, time.time()))
+        print('Epoch %d: %.3f seconds' %
+              (epoch, time.time() - epoch_start_time))
+        print("Epoch start time: %.3f, epoch end time: %.3f" %
+              (epoch_start_time, time.time()))
 
     return top1.avg
 
 
 def save_checkpoint(state, checkpoint_dir, stage):
     assert os.path.isdir(checkpoint_dir)
-    checkpoint_file_path = os.path.join(checkpoint_dir, "checkpoint.%d.pth.tar" % stage)
+    checkpoint_file_path = os.path.join(
+        checkpoint_dir, "checkpoint.%d.pth.tar" % stage)
     torch.save(state, checkpoint_file_path)
     print("Saved checkpoint to %s" % checkpoint_file_path)
 
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self):
         self.reset()
 
@@ -525,6 +962,25 @@ class AverageMeter(object):
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+class AverageMeter_batch(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=10):
+        self.val = val
+        self.sum += val
         self.count += n
         self.avg = self.sum / self.count
 
@@ -542,17 +998,20 @@ def adjust_learning_rate(optimizer, epoch, total_epochs, r, lr_policy, step, epo
     stage_base_lr = r.get_adjusted_learning_rate(base_lr=args.lr)
 
     if args.lr_warmup and epoch < 5:
-        lr = stage_base_lr * float(1 + step + epoch*epoch_length)/(5.*epoch_length)
+        lr = stage_base_lr * \
+            float(1 + step + epoch*epoch_length)/(5.*epoch_length)
 
     else:
         if lr_policy == "step":
             lr = stage_base_lr * (0.1 ** (epoch // 30))
         elif lr_policy == "polynomial":
             power = 2.0
-            lr = stage_base_lr * ((1.0 - (float(epoch) / float(total_epochs))) ** power)
+            lr = stage_base_lr * \
+                ((1.0 - (float(epoch) / float(total_epochs))) ** power)
         elif lr_policy == "exponential_decay":
             decay_rate = 0.97
-            lr = stage_base_lr * (decay_rate ** (float(epoch) / float(total_epochs)))
+            lr = stage_base_lr * \
+                (decay_rate ** (float(epoch) / float(total_epochs)))
         else:
             raise NotImplementedError
 
@@ -571,14 +1030,858 @@ def accuracy(output, target, topk=(1,)):
 
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
+        correct = pred.eq(target.reshape(1, -1).expand_as(pred))
 
         res = []
         for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
 
+def runtime_control(layers, stages, num_layer, present_stage_id, start_id, communicaiton, straggle):
+    # layers(id,forward_time+backward_time) list
+    # stages(id,compute_time) list
+    # num_layer(id,num) list
+    # start_id 所有stage的起始层id list
+    # communication list
+    # straggle list
+    record = [[0 for _ in range(num_layer[present_stage_id]+1)]
+              for _ in range(num_layer[present_stage_id]+1)]
+
+    def compute_pipline_time(stage_list, communication_list):
+        if len(stage_list) == 1:
+            return stage_list[0]
+        for i in range(len(stage_list)-1):
+            tmp1 = stage_list[i]
+            tmp2 = stage_list[i+1]
+            tmp_communication = communication_list[i]
+            tmp_time = 0
+            if tmp1 == max(tmp1, tmp2):
+                if (tmp1)/2 >= (tmp2)/2+tmp_communication:
+                    tmp_time = tmp1
+                else:
+                    tmp_time = tmp_communication-(tmp1-tmp2)/2+tmp1
+            if tmp2 == max(tmp1, tmp2):
+                if (tmp2)/2 >= (tmp1)/2+tmp_communication:
+                    tmp_time = tmp2
+                else:
+                    tmp_time = tmp_communication-(tmp2-tmp1)/2+tmp2
+            stage_list[i+1] = tmp_time
+        return stage_list[-1]
+
+    def find_min_index_2d(arr):
+        min_value = float('inf')
+        min_index = (0, 0)
+        for i in range(len(arr)):
+            for j in range(len(arr[i])):
+                if arr[i][j] < min_value:
+                    min_value = arr[i][j]
+                    min_index = (i, j)
+        return min_index
+
+    def compute_time_1(begin_layer_id, end_layer_id):
+        stages_ = copy.copy(stages)
+        list_ = []
+        communication_list = []
+        for i in range(end_layer_id - begin_layer_id):
+            stages_[present_stage_id - 1] += layers[start_id[present_stage_id] +
+                                                    i]*straggle[present_stage_id-1]
+        for i in range(0, present_stage_id):
+            list_.append(stages_[i])
+            communication_list.append(communicaiton[i])
+        max_time = compute_pipline_time(list_, communication_list)
+        return max_time
+
+    def compute_time_2(begin_layer_id, end_layer_id):
+        stages_ = copy.copy(stages)
+        list_ = []
+        communication_list = []
+        for i in range(end_layer_id - begin_layer_id):
+            stages_[present_stage_id + 1] += layers[start_id[present_stage_id] +
+                                                    begin_layer_id + i]*straggle[present_stage_id+1]
+        for i in range(present_stage_id + 1, 4):
+            # change 4 to stage_num_sum
+            list_.append(stages_[i])
+            communication_list.append(communicaiton[i])
+        max_time = compute_pipline_time(list_, communication_list)
+        return max_time
+
+    def compute_time_3(begin_layer_id, end_layer_id):
+        stages_ = copy.copy(stages)
+        stages_[present_stage_id] = 0
+        for i in range(end_layer_id - begin_layer_id):
+            stages_[present_stage_id] += layers[start_id[present_stage_id] +
+                                                begin_layer_id + i]*straggle[present_stage_id]
+        return stages_[present_stage_id]
+    for i in range(num_layer[present_stage_id]+1):
+        for j in range(num_layer[present_stage_id]+1):
+            if i >= j:
+                record[i][j] = float('inf')
+            else:
+                if present_stage_id-1 >= 0:
+                    time1 = compute_time_1(0, i)  # pre part
+                else:
+                    if i != 0:
+                        record[i][j] = float('inf')
+                        continue
+                    time1 = 0
+                time2 = compute_time_3(i, j)  # medium part f+b
+                if present_stage_id+1 <= 3:
+                    # change 3 to last stage id
+                    time3 = compute_time_2(
+                        j, num_layer[present_stage_id])  # last part
+                else:
+                    if j != num_layer[present_stage_id]:
+                        record[i][j] = float('inf')
+                        continue
+                    time3 = 0
+                if time1 == 0:
+                    record[i][j] = compute_pipline_time(
+                        [time2, time3], [communicaiton[j-1]])
+                elif time3 == 0:
+                    record[i][j] = compute_pipline_time(
+                        [time1, time2], [communicaiton[start_id[present_stage_id]+i-1]])
+                else:
+                    tmp = compute_pipline_time(
+                        [time1, time2], [communicaiton[start_id[present_stage_id]+i-1]])
+                    record[i][j] = compute_pipline_time(
+                        [tmp, time3], [communicaiton[start_id[present_stage_id]+j-1]])
+    min_index = find_min_index_2d(record)
+    print(record[min_index[0]][min_index[1]])
+    return min_index
+
+
+def calculate_new_placement(layer_forward_list, layer_backward_list, layer_communication_list, straggle_for_stage, stage_num, stage_nums, top_k):
+    def main(stage_num, forward_cost_list, backward_cost_list, comm_cost_list, max_micro_batch_num, cur_micro_batch_num, timestamp):
+
+        # # Total stage number
+        # stage_num = 2
+        # # Forward cost and backward cost list of each stage
+        # forward_cost_list = [1, 1]
+        # backward_cost_list = [3, 3]
+        # # Communication cost list of each stage. e.g. The first element is the communication cost between stage 1 and stage 2.
+        # comm_cost_list = [1]
+        #
+        # max_micro_batch_num = 99
+        # cur_micro_batch_num = 0
+        # timestamp = 0
+
+        def get_comm_cost(stage1: float, stage2: float) -> float:
+            """计算两个相邻 stage 的通信时间 (stage 顺序不做限制)。
+
+            Args:
+                stage1 (int): 前一个 stage 的编号。
+                stage2 (int): 后一个 stage 的编号。
+
+            Returns:
+                int: _description_
+            """
+            assert abs(stage1 - stage2) == 1, "The stages must be adjacent!"
+            return comm_cost_list[min(stage1, stage2)]
+
+        class Stage:
+            def __init__(self, idx: int, forward_cost: float, backward_cost: float) -> None:
+                self.idx = idx
+                self.forward_cost = forward_cost
+                self.backward_cost = backward_cost
+
+                self.warmup_mb_num = -1  # not used yet
+
+                self.f_idx = -1  # index of next forward micro_batch
+                self.b_idx = -1  # index of next backward micro_batch
+
+            def __str__(self) -> str:
+                return f"stage_idx: {self.idx}\tforward_cost: {self.forward_cost}\tbackward_cost: {self.backward_cost}\tf_idx: {self.f_idx}\tb_idx: {self.b_idx}."
+
+            def get_next_f_idx(self) -> int:
+                assert self.b_idx >= 0, "Previous backward index is not initialized!"
+                return self.b_idx + (stage_num - self.idx)
+
+            def get_next_b_idx(self) -> int:
+                assert self.f_idx >= 0, "Previous forward index is not initialized!"
+                return self.f_idx - (stage_num - 1 - self.idx)
+
+            def get_prev_b_idx(self) -> int:
+                assert self.f_idx >= 0, "Current forward index is not initialized!"
+                return self.f_idx - (stage_num - self.idx)
+
+            def get_prev_f_idx(self) -> int:
+                assert self.b_idx >= 0, "Current backward index is not initialized!"
+                return self.b_idx + (stage_num - 1 - self.idx)
+
+        def generate_stages():
+            stages = [Stage(i, forward_cost_list[i], backward_cost_list[i])
+                      for i in range(stage_num)]
+            return stages
+
+        stages = generate_stages()
+
+        class MicroBatch:
+            def __init__(self, stage_num: int) -> None:
+                self.stage_num = stage_num
+                self.forward_ts = -1
+                self.backward_ts = -1
+
+                self.forward_cost = stages[self.stage_num].forward_cost
+                self.backward_cost = stages[self.stage_num].backward_cost
+
+            def __str__(self) -> str:
+                return f"stage: {self.stage_num}\tforward_ts: {self.forward_ts}\tbackward_ts: {self.backward_ts}."
+
+        def generate_batches():
+            batches = [
+                [
+                    MicroBatch(stage)
+                    for _ in range(max_micro_batch_num)
+                ]
+                for stage in range(stage_num)
+            ]
+            return batches
+
+        def get_warmup_micro_batch_num(stage: int) -> int:
+            return stage_num - stage - 1
+
+        batches = generate_batches()
+
+        def show_batches(show_diff: bool = True):
+            last_forward_ts, last_backward_ts = -1, -1
+            for stage_idx in range(stage_num):
+                print(f"===== stage {stage_idx} =====")
+                print(type(batches[stage_idx]), len(batches[stage_idx]))
+                for idx, stage in enumerate(batches[stage_idx]):
+                    if idx == len(batches[stage_idx])-stage_num:
+                        return
+                    if show_diff:
+                        if idx % stage_num == 0:
+                            if idx != 0:
+
+                                print(
+                                    f"mb_index: {idx}\tforward_diff: {stage.forward_ts - last_forward_ts}\tbackward_diff: {stage.backward_ts - last_backward_ts}"
+                                )
+                            last_forward_ts = stage.forward_ts
+                            last_backward_ts = stage.backward_ts
+                    else:
+                        print(f"mb_index: {idx}", stage)
+
+        def show_batches_time(show_diff: bool = True):
+            last_forward_ts, last_backward_ts = -1, -1
+            time_sum = 0
+            count = 0
+            for stage_idx in range(1):
+                for idx, stage in enumerate(batches[stage_idx]):
+                    if idx == len(batches[stage_idx])-stage_num:
+                        return time_sum/(stage_num*count)
+                    if show_diff:
+                        if idx % stage_num == 0:
+                            if idx != 0:
+                                count += 1
+                                time_sum += stage.forward_ts - last_forward_ts
+                            last_forward_ts = stage.forward_ts
+                    else:
+                        print(f"mb_index: {idx}", stage)
+
+        def show_stages():
+            for stage in stages:
+                print(stage)
+
+        # * 1. Warmup stage
+        for stage in range(stage_num):
+            warmup_micro_batch_num = get_warmup_micro_batch_num(stage)
+            stages[stage].warmup_mb_num = warmup_micro_batch_num
+            if stage != stage_num - 1:
+                if stage == 0:
+                    batches[stage][0].forward_ts = timestamp
+
+                for i in range(warmup_micro_batch_num):
+                    if stage == 0:
+                        if i != 0:
+                            batches[stage][i].forward_ts = \
+                                batches[stage][i - 1].forward_ts + \
+                                batches[stage][i - 1].forward_cost
+                    else:
+                        batches[stage][i].forward_ts = max(
+                            batches[stage][i - 1].forward_ts +
+                            batches[stage][i - 1].forward_cost,
+                            batches[stage - 1][i].forward_ts + batches[stage - 1][i].forward_cost +
+                            get_comm_cost(stage - 1, stage)
+                        )
+                # update f_idx
+                stages[stage].f_idx = warmup_micro_batch_num
+            else:
+                # update f_idx
+                stages[stage].f_idx = 0
+
+        # show_batches()
+        # show_stages()
+
+        # * 2. Running 1F1B
+        is_f_mode = True
+        exit_flag = False
+        while cur_micro_batch_num <= max_micro_batch_num and (not exit_flag):
+            # * Forward pass
+            if is_f_mode:
+                for stage_idx in range(stage_num):
+                    stage = stages[stage_idx]
+
+                    prev_b_idx = stage.get_prev_b_idx()
+                    prev_backward_finish_ts = -1 if prev_b_idx < 0 else \
+                        batches[stage_idx][prev_b_idx].backward_ts + \
+                        batches[stage_idx][prev_b_idx].backward_cost
+
+                    if stage_idx == 0:
+                        batches[stage_idx][stage.f_idx].forward_ts = max(
+                            batches[stage_idx][stage.f_idx - 1].forward_ts +
+                            batches[stage_idx][stage.f_idx -
+                                               1].forward_cost, prev_backward_finish_ts
+                        )
+                    elif stage_idx == stage_num - 1:
+                        batches[stage_idx][stage.f_idx].forward_ts = max(
+                            batches[stage_idx - 1][stage.f_idx].forward_ts +
+                            batches[stage_idx - 1][stage.f_idx].forward_cost +
+                            get_comm_cost(stage_idx - 1, stage_idx),
+                            prev_backward_finish_ts
+                        )
+                    else:
+                        batches[stage_idx][stage.f_idx].forward_ts = max(
+                            prev_backward_finish_ts,
+                            max(
+                                batches[stage_idx][stage.f_idx - 1].forward_ts +
+                                batches[stage_idx][stage.f_idx -
+                                                   1].forward_cost,
+                                batches[stage_idx - 1][stage.f_idx].forward_ts +
+                                batches[stage_idx - 1][stage.f_idx].forward_cost +
+                                get_comm_cost(stage_idx - 1, stage_idx)
+                            )
+                        )
+                    # update cur_micro_batch_num
+                    cur_micro_batch_num = max(cur_micro_batch_num, stage.f_idx)
+                    # update b_idx
+                    next_b_idx = stage.get_next_b_idx()
+                    # print(f"next_b_idx: {next_b_idx}")
+                    stage.b_idx = next_b_idx
+                    if stage.b_idx >= max_micro_batch_num:
+                        exit_flag = True
+                        break
+
+            # * Backward pass
+            else:
+                for stage_idx in range(stage_num - 1, -1, -1):
+                    stage = stages[stage_idx]
+
+                    prev_f_idx = stage.get_prev_f_idx()
+                    prev_forward_finish_ts = -1 if prev_f_idx < 0 else \
+                        batches[stage_idx][prev_f_idx].forward_ts + \
+                        batches[stage_idx][prev_f_idx].forward_cost
+
+                    if stage_idx == 0:
+                        batches[stage_idx][stage.b_idx].backward_ts = max(
+                            prev_forward_finish_ts,
+                            batches[stage_idx + 1][stage.b_idx].backward_ts + batches[stage_idx +
+                                                                                      1][stage.b_idx].backward_cost + get_comm_cost(stage_idx, stage_idx + 1)
+                        )
+                    elif stage_idx == stage_num - 1:
+                        batches[stage_idx][stage.b_idx].backward_ts = prev_forward_finish_ts
+                    else:
+                        batches[stage_idx][stage.b_idx].backward_ts = max(
+                            prev_forward_finish_ts,
+                            batches[stage_idx + 1][stage.b_idx].backward_ts + batches[stage_idx +
+                                                                                      1][stage.b_idx].backward_cost + get_comm_cost(stage_idx, stage_idx + 1)
+                        )
+                    # update cur_micro_batch_num
+                    cur_micro_batch_num = max(cur_micro_batch_num, stage.b_idx)
+                    # update f_idx
+                    next_f_idx = stage.get_next_f_idx()
+                    # print(f"prev_f_idx: {stage.f_idx}, next_f_idx: {next_f_idx}")
+                    stage.f_idx = next_f_idx
+                    if stage.f_idx >= max_micro_batch_num:
+                        exit_flag = True
+                        break
+
+            # change mode
+            is_f_mode = not is_f_mode
+
+        a = show_batches_time()
+        return a
+    # print(main(3,[1,9,1],[1,3,3],[0,0],99,0,0))
+    import heapq
+    import random
+    random.seed(0)
+    # layer_forward_list=[random.uniform(5, 10) for _ in range(40)]
+    # layer_backward_list=[random.uniform(5, 10) for _ in range(40)]
+    # layer_communication_list=[random.uniform(1, 3) for _ in range(39)]
+
+    layer_communication_list_ = layer_communication_list.copy()
+    layer_communication_list_.insert(0, layer_communication_list[0])
+    layer_process_time = [
+        x + y+z for x, y, z in zip(layer_forward_list, layer_backward_list, layer_communication_list_)]
+
+    for i in range(len(layer_process_time)):
+        if i == 0 or i == len(layer_process_time)-1:
+            continue
+        layer_process_time[i] += layer_communication_list_[i+1]
+    # straggle_for_stage=[1,1,1,1] #
+    # stage_num=4
+    # stage_nums=[6,14,12,8] #
+    layer_forward_list_new = []
+    layer_backward_list_new = []
+    layer_communication_list_new = []
+    # top_k=int(min(stage_nums)/10)
+    # top_k=6  #super
+
+    def top_k_max_indices(lst, start, end, k):
+        # 使用heapq模块的nlargest函数找到前k个最大值的索引
+        max_indices = heapq.nlargest(k, range(start, end), key=lst.__getitem__)
+        max_indices.sort()
+        return max_indices
+
+    def calculate_stage_end_indices(stage_sizes):
+        # 计算每个阶段的结束index
+        end_indices = [sum(stage_sizes[:i+1]) for i in range(len(stage_sizes))]
+        return end_indices
+    stage_index = calculate_stage_end_indices(stage_nums)
+    stage_index.insert(0, 0)
+    print("stage_index", stage_index)
+    max_indexes = []
+    for i in range(1, len(stage_index)):
+        max_index = top_k_max_indices(
+            layer_process_time, stage_index[i-1], stage_index[i], top_k)
+        max_index = [x+1 for x in max_index]
+        max_indexes += max_index
+    max_indexes.insert(0, 0)
+    max_indexes.append(len(layer_forward_list))
+    for i in range(1, len(max_indexes)-1):
+        layer_forward_list_new.append(
+            sum(layer_forward_list[max_indexes[i-1]:max_indexes[i]]))
+        layer_backward_list_new.append(
+            sum(layer_backward_list[max_indexes[i-1]:max_indexes[i]]))
+    for i in range(1, len(max_indexes)-2):
+        layer_communication_list_new.append(
+            layer_communication_list[max_indexes[i]-1])
+    if (max_indexes[-2]-1) != len(layer_forward_list)-1:
+        layer_forward_list_new[-1] += sum(
+            layer_forward_list[max_indexes[-2]:len(layer_forward_list)])
+        layer_backward_list_new[-1] += sum(
+            layer_backward_list[max_indexes[-2]:len(layer_forward_list)])
+    # print(max_indexes)
+    # print(layer_forward_list_new)
+    # print(layer_backward_list_new)
+    # print(layer_communication_list_new)
+    import numpy as np
+    import time
+    time_begin = time.time()
+
+    # for test
+    # layer_forward_list_new=layer_forward_list
+    # layer_communication_list_new=layer_communication_list
+    # layer_backward_list_new=layer_backward_list
+
+    record = np.full((len(layer_forward_list_new),)*(stage_num-1), np.inf)
+    # for i in range(1,len(layer_forward_list_new)):
+    #     for j in range(1,len(layer_forward_list_new)):
+    #         for k in range(1,len(layer_forward_list_new)):
+    #             if i<j<k:
+    #                 print(i,j,k)
+    #                 present_stage_forward=[]
+    #                 present_stage_backward=[]
+    #                 present_stage_forward.append(straggle_for_stage[0]*sum(layer_forward_list_new[0:i]))
+    #                 present_stage_forward.append(straggle_for_stage[1]*sum(layer_forward_list_new[i: j]))
+    #                 present_stage_forward.append(straggle_for_stage[2]*sum(layer_forward_list_new[j:k]))
+    #                 present_stage_forward.append(straggle_for_stage[3]*sum(layer_forward_list_new[k:len(layer_forward_list_new)]))
+    #
+    #                 present_stage_backward.append(straggle_for_stage[0]*sum(layer_backward_list_new[0:i]))
+    #                 present_stage_backward.append(straggle_for_stage[1]*sum(layer_backward_list_new[i:j]))
+    #                 present_stage_backward.append(straggle_for_stage[2]*sum(layer_backward_list_new[j:k]))
+    #                 present_stage_backward.append(straggle_for_stage[3]*sum(layer_backward_list_new[k:len(layer_forward_list_new)]))
+    #                 record[i][j][k]=main(stage_num,present_stage_forward,present_stage_backward,layer_communication_list_new,99,0,0)
+    #                 # print(present_stage_forward)
+    #                 # print(present_stage_backward)
+    #             else:
+    #                 continue
+    for i in range(1, len(layer_forward_list_new)):
+        layer_communication_list_new_ = []
+        present_stage_forward = []
+        present_stage_backward = []
+        present_stage_forward.append(
+            straggle_for_stage[0]*sum(layer_forward_list_new[0:i]))
+        present_stage_forward.append(
+            straggle_for_stage[1]*sum(layer_forward_list_new[i:len(layer_forward_list_new)]))
+
+        present_stage_backward.append(
+            straggle_for_stage[0]*sum(layer_backward_list_new[0:i]))
+        present_stage_backward.append(
+            straggle_for_stage[1]*sum(layer_backward_list_new[i:len(layer_forward_list_new)]))
+        layer_communication_list_new_.append(
+            layer_communication_list_new[i - 1])
+        record[i] = main(stage_num, present_stage_forward,
+                         present_stage_backward, layer_communication_list_new_, 99, 0, 0)
+        # print(present_stage_forward)
+        # print(present_stage_backward)
+    flat_index_of_min = np.argmin(record)
+    # 将扁平化索引转换为多维索引
+    min_index = np.unravel_index(flat_index_of_min, record.shape)
+    new_stage_nums = []
+    # new_stage_nums.append(max_indexes[min_index[0]])
+    # for i in range(1,stage_num-1):
+    #     new_stage_nums.append(max_indexes[min_index[i]]-max_indexes[min_index[i-1]])
+    # new_stage_nums.append(len(layer_forward_list)-max_indexes[min_index[stage_num-2]])
+    # new_stage_nums=[max_indexes[min_index[0]],max_indexes[min_index[1]]-max_indexes[min_index[0]],
+    #                 max_indexes[min_index[2]]-max_indexes[min_index[1]],len(layer_forward_list)-max_indexes[min_index[2]]]
+    new_stage_nums = [max_indexes[min_index[0]], len(
+        layer_forward_list)-max_indexes[min_index[0]]]
+    print("rearange", new_stage_nums)
+    return new_stage_nums
+
+
+# def calculate_new_placement(layer_forward_list,layer_backward_list,layer_communication_list,straggle_for_stage,stage_num,stage_nums,top_k):
+#     def main(stage_num,forward_cost_list,backward_cost_list,comm_cost_list,max_micro_batch_num,cur_micro_batch_num,timestamp):
+#
+#         # # Total stage number
+#         # stage_num = 2
+#         # # Forward cost and backward cost list of each stage
+#         # forward_cost_list = [1, 1]
+#         # backward_cost_list = [3, 3]
+#         # # Communication cost list of each stage. e.g. The first element is the communication cost between stage 1 and stage 2.
+#         # comm_cost_list = [1]
+#         #
+#         # max_micro_batch_num = 99
+#         # cur_micro_batch_num = 0
+#         # timestamp = 0
+#
+#         def get_comm_cost(stage1: float, stage2: float) -> float:
+#             """计算两个相邻 stage 的通信时间 (stage 顺序不做限制)。
+#
+#             Args:
+#                 stage1 (int): 前一个 stage 的编号。
+#                 stage2 (int): 后一个 stage 的编号。
+#
+#             Returns:
+#                 int: _description_
+#             """
+#             assert abs(stage1 - stage2) == 1, "The stages must be adjacent!"
+#             return comm_cost_list[min(stage1, stage2)]
+#
+#         class Stage:
+#             def __init__(self, idx: int, forward_cost: float, backward_cost: float) -> None:
+#                 self.idx = idx
+#                 self.forward_cost = forward_cost
+#                 self.backward_cost = backward_cost
+#
+#                 self.warmup_mb_num = -1  # not used yet
+#
+#                 self.f_idx = -1  # index of next forward micro_batch
+#                 self.b_idx = -1  # index of next backward micro_batch
+#
+#             def __str__(self) -> str:
+#                 return f"stage_idx: {self.idx}\tforward_cost: {self.forward_cost}\tbackward_cost: {self.backward_cost}\tf_idx: {self.f_idx}\tb_idx: {self.b_idx}."
+#
+#             def get_next_f_idx(self) -> int:
+#                 assert self.b_idx >= 0, "Previous backward index is not initialized!"
+#                 return self.b_idx + (stage_num - self.idx)
+#
+#             def get_next_b_idx(self) -> int:
+#                 assert self.f_idx >= 0, "Previous forward index is not initialized!"
+#                 return self.f_idx - (stage_num - 1 - self.idx)
+#
+#             def get_prev_b_idx(self) -> int:
+#                 assert self.f_idx >= 0, "Current forward index is not initialized!"
+#                 return self.f_idx - (stage_num - self.idx)
+#
+#             def get_prev_f_idx(self) -> int:
+#                 assert self.b_idx >= 0, "Current backward index is not initialized!"
+#                 return self.b_idx + (stage_num - 1 - self.idx)
+#
+#         def generate_stages():
+#             stages = [Stage(i, forward_cost_list[i], backward_cost_list[i]) for i in range(stage_num)]
+#             return stages
+#
+#         stages = generate_stages()
+#
+#         class MicroBatch:
+#             def __init__(self, stage_num: int) -> None:
+#                 self.stage_num = stage_num
+#                 self.forward_ts = -1
+#                 self.backward_ts = -1
+#
+#                 self.forward_cost = stages[self.stage_num].forward_cost
+#                 self.backward_cost = stages[self.stage_num].backward_cost
+#
+#             def __str__(self) -> str:
+#                 return f"stage: {self.stage_num}\tforward_ts: {self.forward_ts}\tbackward_ts: {self.backward_ts}."
+#
+#         def generate_batches():
+#             batches = [
+#                 [
+#                     MicroBatch(stage)
+#                     for _ in range(max_micro_batch_num)
+#                 ] \
+#                 for stage in range(stage_num)
+#             ]
+#             return batches
+#
+#         def get_warmup_micro_batch_num(stage: int) -> int:
+#             return stage_num - stage - 1
+#
+#         batches = generate_batches()
+#
+#         def show_batches(show_diff: bool = True):
+#             last_forward_ts, last_backward_ts = -1, -1
+#             for stage_idx in range(stage_num):
+#                 print(f"===== stage {stage_idx} =====")
+#                 print(type(batches[stage_idx]),len(batches[stage_idx]))
+#                 for idx, stage in enumerate(batches[stage_idx]):
+#                     if idx==len(batches[stage_idx])-stage_num:
+#                         return
+#                     if show_diff:
+#                         if idx % stage_num == 0:
+#                             if idx != 0:
+#
+#                                 print(
+#                                     f"mb_index: {idx}\tforward_diff: {stage.forward_ts - last_forward_ts}\tbackward_diff: {stage.backward_ts - last_backward_ts}"
+#                                 )
+#                             last_forward_ts = stage.forward_ts
+#                             last_backward_ts = stage.backward_ts
+#                     else:
+#                         print(f"mb_index: {idx}", stage)
+#
+#         def show_batches_time(show_diff: bool = True):
+#             last_forward_ts, last_backward_ts = -1, -1
+#             time_sum=0
+#             count=0
+#             for stage_idx in range(1):
+#                 for idx, stage in enumerate(batches[stage_idx]):
+#                     if idx==len(batches[stage_idx])-stage_num:
+#                         return time_sum/(stage_num*count)
+#                     if show_diff:
+#                         if idx % stage_num == 0:
+#                             if idx != 0:
+#                                 count+=1
+#                                 time_sum+=stage.forward_ts - last_forward_ts
+#                             last_forward_ts = stage.forward_ts
+#                     else:
+#                         print(f"mb_index: {idx}", stage)
+#
+#         def show_stages():
+#             for stage in stages:
+#                 print(stage)
+#
+#         # * 1. Warmup stage
+#         for stage in range(stage_num):
+#             warmup_micro_batch_num = get_warmup_micro_batch_num(stage)
+#             stages[stage].warmup_mb_num = warmup_micro_batch_num
+#             if stage != stage_num - 1:
+#                 if stage == 0:
+#                     batches[stage][0].forward_ts = timestamp
+#
+#                 for i in range(warmup_micro_batch_num):
+#                     if stage == 0:
+#                         if i != 0:
+#                             batches[stage][i].forward_ts = \
+#                                 batches[stage][i - 1].forward_ts + batches[stage][i - 1].forward_cost
+#                     else:
+#                         batches[stage][i].forward_ts = max(
+#                             batches[stage][i - 1].forward_ts + batches[stage][i - 1].forward_cost,
+#                             batches[stage - 1][i].forward_ts + batches[stage - 1][i].forward_cost +
+#                             get_comm_cost(stage - 1, stage)
+#                         )
+#                 # update f_idx
+#                 stages[stage].f_idx = warmup_micro_batch_num
+#             else:
+#                 # update f_idx
+#                 stages[stage].f_idx = 0
+#
+#         # show_batches()
+#         # show_stages()
+#
+#         # * 2. Running 1F1B
+#         is_f_mode = True
+#         exit_flag = False
+#         while cur_micro_batch_num <= max_micro_batch_num and (not exit_flag):
+#             # * Forward pass
+#             if is_f_mode:
+#                 for stage_idx in range(stage_num):
+#                     stage = stages[stage_idx]
+#
+#                     prev_b_idx = stage.get_prev_b_idx()
+#                     prev_backward_finish_ts = -1 if prev_b_idx < 0 else \
+#                         batches[stage_idx][prev_b_idx].backward_ts + batches[stage_idx][prev_b_idx].backward_cost
+#
+#                     if stage_idx == 0:
+#                         batches[stage_idx][stage.f_idx].forward_ts = max(
+#                             batches[stage_idx][stage.f_idx - 1].forward_ts +
+#                             batches[stage_idx][stage.f_idx - 1].forward_cost, prev_backward_finish_ts
+#                         )
+#                     elif stage_idx == stage_num - 1:
+#                         batches[stage_idx][stage.f_idx].forward_ts = max(
+#                             batches[stage_idx - 1][stage.f_idx].forward_ts +
+#                             batches[stage_idx - 1][stage.f_idx].forward_cost + get_comm_cost(stage_idx - 1, stage_idx),
+#                             prev_backward_finish_ts
+#                         )
+#                     else:
+#                         batches[stage_idx][stage.f_idx].forward_ts = max(
+#                             prev_backward_finish_ts,
+#                             max(
+#                                 batches[stage_idx][stage.f_idx - 1].forward_ts +
+#                                 batches[stage_idx][stage.f_idx - 1].forward_cost,
+#                                 batches[stage_idx - 1][stage.f_idx].forward_ts +
+#                                 batches[stage_idx - 1][stage.f_idx].forward_cost + get_comm_cost(stage_idx - 1, stage_idx)
+#                             )
+#                         )
+#                     # update cur_micro_batch_num
+#                     cur_micro_batch_num = max(cur_micro_batch_num, stage.f_idx)
+#                     # update b_idx
+#                     next_b_idx = stage.get_next_b_idx()
+#                     # print(f"next_b_idx: {next_b_idx}")
+#                     stage.b_idx = next_b_idx
+#                     if stage.b_idx >= max_micro_batch_num:
+#                         exit_flag = True
+#                         break
+#
+#             # * Backward pass
+#             else:
+#                 for stage_idx in range(stage_num - 1, -1, -1):
+#                     stage = stages[stage_idx]
+#
+#                     prev_f_idx = stage.get_prev_f_idx()
+#                     prev_forward_finish_ts = -1 if prev_f_idx < 0 else \
+#                         batches[stage_idx][prev_f_idx].forward_ts + batches[stage_idx][prev_f_idx].forward_cost
+#
+#                     if stage_idx == 0:
+#                         batches[stage_idx][stage.b_idx].backward_ts = max(
+#                             prev_forward_finish_ts,\
+#                             batches[stage_idx + 1][stage.b_idx].backward_ts + batches[stage_idx + 1][stage.b_idx].backward_cost + get_comm_cost(stage_idx, stage_idx + 1)
+#                         )
+#                     elif stage_idx == stage_num - 1:
+#                         batches[stage_idx][stage.b_idx].backward_ts = prev_forward_finish_ts
+#                     else:
+#                         batches[stage_idx][stage.b_idx].backward_ts = max(
+#                             prev_forward_finish_ts,\
+#                             batches[stage_idx + 1][stage.b_idx].backward_ts + batches[stage_idx + 1][stage.b_idx].backward_cost + get_comm_cost(stage_idx, stage_idx + 1)
+#                         )
+#                     # update cur_micro_batch_num
+#                     cur_micro_batch_num = max(cur_micro_batch_num, stage.b_idx)
+#                     # update f_idx
+#                     next_f_idx = stage.get_next_f_idx()
+#                     # print(f"prev_f_idx: {stage.f_idx}, next_f_idx: {next_f_idx}")
+#                     stage.f_idx = next_f_idx
+#                     if stage.f_idx >= max_micro_batch_num:
+#                         exit_flag = True
+#                         break
+#
+#             # change mode
+#             is_f_mode = not is_f_mode
+#
+#         a=show_batches_time()
+#         return a
+#     # print(main(3,[1,9,1],[1,3,3],[0,0],99,0,0))
+#     import heapq
+#     import random
+#     random.seed(0)
+#     # layer_forward_list=[random.uniform(5, 10) for _ in range(40)]
+#     # layer_backward_list=[random.uniform(5, 10) for _ in range(40)]
+#     # layer_communication_list=[random.uniform(1, 3) for _ in range(39)]
+#
+#
+#     layer_communication_list_=layer_communication_list.copy()
+#     layer_communication_list_.insert(0,layer_communication_list[0])
+#     layer_process_time=[x + y+z for x, y,z in zip(layer_forward_list, layer_backward_list,layer_communication_list_)]
+#
+#     for i in range(len(layer_process_time)):
+#         if i==0 or i==len(layer_process_time)-1:
+#             continue
+#         layer_process_time[i]+=layer_communication_list_[i+1]
+#     # straggle_for_stage=[1,1,1,1] #
+#     # stage_num=4
+#     # stage_nums=[6,14,12,8] #
+#     layer_forward_list_new=[]
+#     layer_backward_list_new=[]
+#     layer_communication_list_new=[]
+#     # top_k=int(min(stage_nums)/10)
+#     # top_k=6  #super
+#
+#     def top_k_max_indices(lst, start,end,k):
+#         # 使用heapq模块的nlargest函数找到前k个最大值的索引
+#         max_indices = heapq.nlargest(k, range(start,end), key=lst.__getitem__)
+#         max_indices.sort()
+#         return max_indices
+#     def calculate_stage_end_indices(stage_sizes):
+#         # 计算每个阶段的结束index
+#         end_indices = [sum(stage_sizes[:i+1]) for i in range(len(stage_sizes))]
+#         return end_indices
+#     stage_index=calculate_stage_end_indices(stage_nums)
+#     stage_index.insert(0,0)
+#     print("stage_index",stage_index)
+#     max_indexes=[]
+#     for i in range(1,len(stage_index)):
+#         max_index=top_k_max_indices(layer_process_time,stage_index[i-1],stage_index[i],top_k)
+#         max_index=[x+1 for x in max_index]
+#         max_indexes+=max_index
+#     max_indexes.insert(0,0)
+#     max_indexes.append(len(layer_forward_list))
+#     for i in range(1,len(max_indexes)-1):
+#         layer_forward_list_new.append(sum(layer_forward_list[max_indexes[i-1]:max_indexes[i]]))
+#         layer_backward_list_new.append(sum(layer_backward_list[max_indexes[i-1]:max_indexes[i]]))
+#     for i in range(1,len(max_indexes)-2):
+#         layer_communication_list_new.append(layer_communication_list[max_indexes[i]-1])
+#     if (max_indexes[-2]-1)!=len(layer_forward_list)-1:
+#         layer_forward_list_new[-1]+=sum(layer_forward_list[max_indexes[-2]:len(layer_forward_list)])
+#         layer_backward_list_new[-1]+=sum(layer_backward_list[max_indexes[-2]:len(layer_forward_list)])
+#     # print(max_indexes)
+#     # print(layer_forward_list_new)
+#     # print(layer_backward_list_new)
+#     # print(layer_communication_list_new)
+#     import numpy as np
+#     import time
+#     time_begin=time.time()
+#
+#     #for test
+#     # layer_forward_list_new=layer_forward_list
+#     # layer_communication_list_new=layer_communication_list
+#     # layer_backward_list_new=layer_backward_list
+#
+#     record=np.full((len(layer_forward_list_new),)*(stage_num-1),np.inf)
+#     for i in range(1,len(layer_forward_list_new)):
+#         for j in range(1,len(layer_forward_list_new)):
+#             for k in range(1,len(layer_forward_list_new)):
+#                 if i<j<k:
+#                     print(i,j,k)
+#                     present_stage_forward=[]
+#                     present_stage_backward=[]
+#                     present_stage_forward.append(straggle_for_stage[0]*sum(layer_forward_list_new[0:i]))
+#                     present_stage_forward.append(straggle_for_stage[1]*sum(layer_forward_list_new[i: j]))
+#                     present_stage_forward.append(straggle_for_stage[2]*sum(layer_forward_list_new[j:k]))
+#                     present_stage_forward.append(straggle_for_stage[3]*sum(layer_forward_list_new[k:len(layer_forward_list_new)]))
+#
+#                     present_stage_backward.append(straggle_for_stage[0]*sum(layer_backward_list_new[0:i]))
+#                     present_stage_backward.append(straggle_for_stage[1]*sum(layer_backward_list_new[i:j]))
+#                     present_stage_backward.append(straggle_for_stage[2]*sum(layer_backward_list_new[j:k]))
+#                     present_stage_backward.append(straggle_for_stage[3]*sum(layer_backward_list_new[k:len(layer_forward_list_new)]))
+#                     record[i][j][k]=main(stage_num,present_stage_forward,present_stage_backward,layer_communication_list_new,99,0,0)
+#                     # print(present_stage_forward)
+#                     # print(present_stage_backward)
+#                 else:
+#                     continue
+#
+#     flat_index_of_min = np.argmin(record)
+#     # 将扁平化索引转换为多维索引
+#     min_index = np.unravel_index(flat_index_of_min, record.shape)
+#     print("最小值的下标:", min_index)
+#     print("final result",record[min_index[0]][min_index[1]][min_index[2]])
+#     print("time",time.time()-time_begin)
+#     new_stage_nums=[]
+#     new_stage_nums.append(max_indexes[min_index[0]])
+#     for i in range(1,stage_num-1):
+#         new_stage_nums.append(max_indexes[min_index[i]]-max_indexes[min_index[i-1]])
+#     new_stage_nums.append(len(layer_forward_list)-max_indexes[min_index[stage_num-2]])
+#     new_stage_nums=[max_indexes[min_index[0]],max_indexes[min_index[1]]-max_indexes[min_index[0]],
+#                     max_indexes[min_index[2]]-max_indexes[min_index[1]],len(layer_forward_list)-max_indexes[min_index[2]]]
+#     print("rearange",new_stage_nums)
+#     return new_stage_nums
 if __name__ == '__main__':
+    # if args.rank==1:
+    #     from viztracer import VizTracer
+    #     with VizTracer(output_file="result_pp.json") as tracer:
+    #         main()
+    # else:
+    #     main()
     main()

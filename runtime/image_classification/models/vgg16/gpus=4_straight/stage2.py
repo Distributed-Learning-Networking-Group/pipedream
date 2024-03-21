@@ -12,12 +12,12 @@ class Stage2(torch.nn.Module):
         self.layer3 = torch.nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
         self.layer4 = torch.nn.ReLU(inplace=True)
         self.layer5 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-        self.layer6 = torch.nn.Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.layer7 = torch.nn.ReLU(inplace=True)
-        self.layer8 = torch.nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.layer9 = torch.nn.ReLU(inplace=True)
-        self.layer10 = torch.nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.layer11 = torch.nn.ReLU(inplace=True)
+        # self.layer6 = torch.nn.Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        # self.layer7 = torch.nn.ReLU(inplace=True)
+        # self.layer8 = torch.nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        # self.layer9 = torch.nn.ReLU(inplace=True)
+        # self.layer10 = torch.nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        # self.layer11 = torch.nn.ReLU(inplace=True)
         self._initialize_weights()
 
     def forward(self, input0):
@@ -27,13 +27,13 @@ class Stage2(torch.nn.Module):
         out3 = self.layer3(out2)
         out4 = self.layer4(out3)
         out5 = self.layer5(out4)
-        out6 = self.layer6(out5)
-        out7 = self.layer7(out6)
-        out8 = self.layer8(out7)
-        out9 = self.layer9(out8)
-        out10 = self.layer10(out9)
-        out11 = self.layer11(out10)
-        return out11
+        # out6 = self.layer6(out5)
+        # out7 = self.layer7(out6)
+        # out8 = self.layer8(out7)
+        # out9 = self.layer9(out8)
+        # out10 = self.layer10(out9)
+        # out11 = self.layer11(out10)
+        return out5
 
     def _initialize_weights(self):
         for m in self.modules():

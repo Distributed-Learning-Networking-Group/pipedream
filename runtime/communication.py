@@ -10,6 +10,7 @@ import sys
 import threadsafe_counter
 import threadsafe_queue
 
+import time
 
 NCCL='nccl'
 GLOO='gloo'
@@ -23,7 +24,7 @@ class CommunicationHandler(object):
     """
     def __init__(self, master_addr, master_port, rank,
                  local_rank, num_ranks_in_server,
-                 world_size, fp16, backend):
+                 world_size, fp16, backend,EVENT,EVENT1):
         """ Set up process groups.
 
         Note: To turn off broadcasting, set num_ranks_in_server = 1.
@@ -34,6 +35,11 @@ class CommunicationHandler(object):
         self.num_ranks_in_server = num_ranks_in_server
         self.world_size = world_size
         self.fp16 = fp16
+        self.event=EVENT
+        self.event1 = EVENT1
+
+        print(self.event)
+        print(self.event1)
         assert num_ranks_in_server > 0
 
         # Initialize the distributed environment.
@@ -51,6 +57,7 @@ class CommunicationHandler(object):
             return
 
         # Stores information about tensors sent directly GPU-to-GPU.
+
         self.connection_list = []
 
         # Stores process groups (for broadcast() connections).
@@ -110,7 +117,30 @@ class CommunicationHandler(object):
         self.setup_queues()
         self.setup_messaging_schedule()
         self.create_process_groups()
+    def initialize1(self, receive_ranks, send_ranks,
+                   tensor_tags, target_tensor_names,
+                   training_tensor_dtypes,
+                   rank_in_stage,
+                   num_ranks_in_stage,
+                   ranks_in_previous_stage,
+                   ranks_in_next_stage):
+        """
+        Initialize state needed for CommunicationHandler.
+        """
+        self.receive_ranks = receive_ranks
+        self.send_ranks = send_ranks
+        self.tensor_tags = tensor_tags
+        self.target_tensor_names = target_tensor_names
+        self.training_tensor_dtypes = training_tensor_dtypes
+        self.rank_in_stage = rank_in_stage
+        self.num_ranks_in_stage = num_ranks_in_stage
+        self.ranks_in_previous_stage = ranks_in_previous_stage
+        self.num_ranks_in_previous_stage = len(ranks_in_previous_stage)
+        self.ranks_in_next_stage = ranks_in_next_stage
+        self.num_ranks_in_next_stage = len(ranks_in_next_stage)
 
+        self.setup_queues()
+        self.setup_messaging_schedule()
     def setup_queues(self):
         """
         Setup queues for communication between main compute thread
@@ -209,6 +239,11 @@ class CommunicationHandler(object):
                 self.backward_receive_queues["ack"].append(
                     threadsafe_queue.Queue())
                 self.num_ack_threads += 1
+        print(self.forward_receive_queues)
+        print(self.backward_receive_queues)
+        print(self.forward_send_queues)
+        print(self.backward_send_queues)
+
 
     def set_tensor_shapes(self, tensor_shapes):
         self.tensor_shapes = tensor_shapes
@@ -255,9 +290,11 @@ class CommunicationHandler(object):
             self.set_counter(self.num_forward_threads +
                              self.num_ack_threads)
             # For validation, receive acks in backward pass from next stage, send
-            # acks in backward pass to next stage.
+            # acks in backward pass to next stagre.
             self.receive_ranks["ack"] = self.ranks_in_previous_stage
             self.send_ranks["ack"] = self.ranks_in_next_stage
+
+
         else:
             self.set_counter(self.num_forward_threads +
                              self.num_backward_threads)
@@ -266,24 +303,32 @@ class CommunicationHandler(object):
             if "ack" in self.send_ranks:
                 del self.send_ranks["ack"]
 
+
+
         (num_iterations_for_forward_threads,
          num_iterations_for_backward_threads) = \
             self.num_iterations_for_helper_threads(
                 num_iterations=num_iterations)
+        # print("in start")
+        # print(num_iterations_for_forward_threads)
+        # print(num_iterations_for_backward_threads)
+        # print(self.receive_ranks)
+        # print(self.send_ranks)
         dtype = torch.float16 if self.fp16 else torch.float32
 
         # Setup queues for each tensor to be received and sent.
         for input_name in self.receive_ranks:
-            if input_name in self.target_tensor_names or input_name == "ack":
+            if input_name in self.target_tensor_names or input_name == "ack" :
                 continue
 
             for i in range(len(self.receive_ranks[input_name])):
                 if not forward_only:
+                    print("in not forward only")
                     self.start_helper_thread(
                         self.send_helper_thread_args,
                         send_helper_thread,
                         [input_name, i, True],
-                        num_iterations_for_backward_threads)
+                        num_iterations_for_backward_threads,self.event1)
                 self.start_helper_thread(
                     self.recv_helper_thread_args,
                     recv_helper_thread,
@@ -291,9 +336,9 @@ class CommunicationHandler(object):
                      i,
                      self.training_tensor_dtypes[input_name],
                      False],
-                    num_iterations_for_backward_threads)
+                    num_iterations_for_backward_threads,self.event)
         for output_name in self.send_ranks:
-            if output_name in self.target_tensor_names or output_name == "ack":
+            if output_name in self.target_tensor_names or output_name == "ack" :
                 continue
 
             for i in range(len(self.send_ranks[output_name])):
@@ -304,12 +349,12 @@ class CommunicationHandler(object):
                         [output_name, i,
                          self.training_tensor_dtypes[output_name],
                          True],
-                        num_iterations_for_forward_threads)
+                        num_iterations_for_forward_threads,self.event1)
                 self.start_helper_thread(
                     self.send_helper_thread_args,
                     send_helper_thread,
                     [output_name, i, False],
-                    num_iterations_for_forward_threads)
+                    num_iterations_for_forward_threads,self.event)
 
         for target_tensor_name in self.target_tensor_names:
             if self.num_ranks_in_previous_stage > 0:
@@ -319,7 +364,7 @@ class CommunicationHandler(object):
                         recv_helper_thread,
                         [target_tensor_name, i, torch.int64,
                          False],
-                        num_iterations_for_backward_threads)
+                        num_iterations_for_backward_threads,self.event)
 
             if self.num_ranks_in_next_stage > 0:
                 for i in range(len(self.send_ranks[target_tensor_name])):
@@ -327,7 +372,7 @@ class CommunicationHandler(object):
                         self.send_helper_thread_args,
                         send_helper_thread,
                         [target_tensor_name, i, False],
-                        num_iterations_for_forward_threads)
+                        num_iterations_for_forward_threads,self.event)
 
         # Start helper threads for ack for forward pass-only run as a clocking
         # mechanism.
@@ -337,20 +382,25 @@ class CommunicationHandler(object):
                     self.start_helper_thread(self.send_helper_thread_args,
                                              send_helper_thread,
                                              ["ack", i, True],
-                                             num_iterations_for_backward_threads)
+                                             num_iterations_for_backward_threads,self.event1)
             if "ack" in self.send_ranks:
                 for i in range(len(self.send_ranks["ack"])):
                     self.start_helper_thread(self.recv_helper_thread_args,
                                              recv_helper_thread,
                                              ["ack", i, torch.int64, True],
-                                             num_iterations_for_forward_threads)
+                                             num_iterations_for_forward_threads,self.event)
 
-    def start_helper_thread(self, args_func, func, args_func_args, num_iterations):
+
+
+    def start_helper_thread(self, args_func, func, args_func_args, num_iterations,event):
         """
         Start passed-in func on a helper thread.
         """
         args_func_args += [num_iterations]
+        args_func_args+=[event]
         args = args_func(*args_func_args)
+        print("in start")
+        print(args)
         helper_thread = threading.Thread(target=func,
                                          args=args)
         helper_thread.start()
@@ -521,7 +571,7 @@ class CommunicationHandler(object):
                         len(self.messaging_schedule) - 1
 
     def recv_helper_thread_args(self, tensor_name, index, dtype,
-                                backward, num_iterations):
+                                backward, num_iterations,event):
         if backward:
             src_rank = self.send_ranks[tensor_name][index]
         else:
@@ -529,7 +579,7 @@ class CommunicationHandler(object):
 
         sub_process_group = None
         tag = self.tensor_tags[tensor_name]
-        if self.is_gpu_to_gpu_comm(connected_rank=src_rank) and tensor_name != "ack":
+        if self.is_gpu_to_gpu_comm(connected_rank=src_rank) and tensor_name != "ack" :
             min_rank = min(self.rank, src_rank)
             max_rank = max(self.rank, src_rank)
             if src_rank > self.rank:
@@ -548,10 +598,10 @@ class CommunicationHandler(object):
 
         return (queue, self.counter, self.local_rank, tensor_name,
                 src_rank, tag, tensor_shape, dtype, sub_process_group,
-                num_iterations)
+                num_iterations,event)
 
     def send_helper_thread_args(self, tensor_name, index,
-                                backward, num_iterations):
+                                backward, num_iterations,event):
         if backward:
             dst_rank = self.receive_ranks[tensor_name][index]
             num_ranks_in_connected_stage = self.num_ranks_in_previous_stage
@@ -561,7 +611,7 @@ class CommunicationHandler(object):
 
         sub_process_group = None
         tag = self.tensor_tags[tensor_name]
-        if self.is_gpu_to_gpu_comm(connected_rank=dst_rank) and tensor_name != "ack":
+        if self.is_gpu_to_gpu_comm(connected_rank=dst_rank) and tensor_name != "ack" :
             min_rank = min(self.rank, dst_rank)
             max_rank = max(self.rank, dst_rank)
             if dst_rank > self.rank:
@@ -578,13 +628,15 @@ class CommunicationHandler(object):
             queue = self.forward_send_queues[tensor_name][index]
 
         return (queue, self.counter, self.local_rank, tensor_name, self.rank,
-                dst_rank, tag, sub_process_group, num_iterations)
+                dst_rank, tag, sub_process_group, num_iterations,event)
 
     def recv(self, tensor_name, forward_minibatch_id,
              backward_minibatch_id, backward=False):
+
         if backward:
             index = (backward_minibatch_id + self.rank_in_stage) % \
                 len(self.backward_receive_queues[tensor_name])
+
             tensor = self.backward_receive_queues[tensor_name][
                 index].remove()
             return tensor
@@ -592,45 +644,76 @@ class CommunicationHandler(object):
             index = self.get_messaging_index(sending=False)
             tensor = self.forward_receive_queues[tensor_name][
                 index].remove()
+
             if tensor.dtype == torch.float32:
                 tensor = tensor.requires_grad_()
             return tensor
 
     def send(self, tensor_name, tensor, forward_minibatch_id,
              backward_minibatch_id, backward=False):
+
         if backward:
             index = self.get_messaging_index(sending=True)
+
             dst_rank = self.receive_ranks[tensor_name][index]
             self.backward_send_queues[tensor_name][index].add(tensor)
         else:
             index = (forward_minibatch_id + self.rank_in_stage) % \
                 len(self.send_ranks[tensor_name])
+
             self.forward_send_queues[tensor_name][index].add(tensor)
 
 def recv_helper_thread(queue, counter, local_rank, tensor_name,
                        src_rank, tag, tensor_shape, dtype,
-                       sub_process_group, num_iterations):
+                       sub_process_group, num_iterations,event):
     torch.cuda.set_device(local_rank)
+    # print(" in recv helper thread")
+    # print(event.is_set())
     # This method is to be executed from a helper daemon thread.
+    #time1=time.time()
     for i in range(num_iterations):
+
+        # print("in rec%s begin %d %f" % (tensor_name, i,time.time()))
+        # print(time.time())
         tensor = _recv(
             tensor_name, src_rank, tensor_shape=tensor_shape,
             dtype=dtype, tag=tag,
             sub_process_group=sub_process_group)
         queue.add(tensor)
+        # print("in rec%s finish %d %f" % (tensor_name, i,time.time()))
+        if event.is_set():
+            print("in rec %s break %d" % (tensor_name, i))
+            break
+    # print("rec out")
+    # time2 = time.time()
+    # time_recv = time2 - time1
+    # tensor_size = tensor.element_size() * tensor.nelement() / (1024 ** 2)
+    # print("tensor size %d in recv%d %s %f" % (tensor_size, i, tensor_name, time_recv))
     counter.decrement()
+    #os._exit(0)
 
 def send_helper_thread(queue, counter, local_rank, tensor_name,
                        src_rank, dst_rank, tag,
-                       sub_process_group, num_iterations):
+                       sub_process_group, num_iterations,event):
     torch.cuda.set_device(local_rank)
     # This method is to be executed from a helper daemon thread.
     for i in range(num_iterations):
+
         tensor = queue.remove()
+        tensor_size = tensor.element_size() * tensor.nelement() / (1024 ** 2)
+        # print("tensor size %d in recv%d %s " % (tensor_size, i, tensor_name))
+        # print("in send begin %s %d %f" % (tensor_name, i,time.time()))
         _send(tensor, tensor_name, src_rank, dst_rank,
               tag=tag,
               sub_process_group=sub_process_group)
+        # print("in send%s finish %d" % (tensor_name, i))
+        # print(time.time())
+        if event.is_set():
+            print("in send %s break %d" % (tensor_name, i))
+            break
+    #print("send out")
     counter.decrement()
+    #os._exit(0)
 
 def _recv(tensor_name, src_rank, tensor_shape=None, dtype=torch.float32,
           tensor=None, tag=None, sub_process_group=None):
@@ -645,37 +728,37 @@ def _recv(tensor_name, src_rank, tensor_shape=None, dtype=torch.float32,
         assert dtype is not None
         assert dtype != torch.float16
 
-    if sub_process_group is not None:
+    # if sub_process_group is not None:
+    #     # Receive tensor shape.
+    #     received_tensor_shape = torch.zeros(len(tensor_shape),
+    #                                         dtype=torch.int)
+    #     dist.broadcast(tensor=received_tensor_shape,
+    #                    src=src_rank,
+    #                    group=sub_process_group)
+    #     received_tensor_shape = list(map(lambda x: int(x),
+    #                                      received_tensor_shape))
+    #     #print(received_tensor_shape)
+    #     # Receive tensor.
+    #     tensor = torch.zeros(received_tensor_shape, dtype=dtype).cuda()
+    #     dist.broadcast(tensor=tensor,
+    #                    src=src_rank,
+    #                    group=sub_process_group)
+    # else:
         # Receive tensor shape.
-        received_tensor_shape = torch.zeros(len(tensor_shape),
-                                            dtype=torch.int)
-        dist.broadcast(tensor=received_tensor_shape,
-                       src=src_rank,
-                       group=sub_process_group)
-        received_tensor_shape = list(map(lambda x: int(x),
-                                         received_tensor_shape))
-
-        # Receive tensor.
-        tensor = torch.zeros(received_tensor_shape, dtype=dtype).cuda()
-        dist.broadcast(tensor=tensor,
-                       src=src_rank,
-                       group=sub_process_group)
-    else:
-        # Receive tensor shape.
-        received_tensor_shape = torch.zeros(len(tensor_shape),
-                                            dtype=torch.int)
-        dist.recv(tensor=received_tensor_shape,
-                  src=src_rank,
-                  tag=tag)
-        received_tensor_shape = list(map(lambda x: int(x),
-                                         received_tensor_shape))
-
-        # Receive tensor.
-        tensor = torch.zeros(received_tensor_shape, dtype=dtype)
-        dist.recv(tensor=tensor,
-                  src=src_rank,
-                  tag=tag)
-        tensor = tensor.cuda()
+    received_tensor_shape = torch.zeros(len(tensor_shape),
+                                        dtype=torch.int)
+    dist.recv(tensor=received_tensor_shape,
+              src=src_rank,
+              tag=tag)
+    received_tensor_shape = list(map(lambda x: int(x),
+                                     received_tensor_shape))
+    # print(received_tensor_shape)
+    # Receive tensor.
+    tensor = torch.zeros(received_tensor_shape, dtype=dtype)
+    dist.recv(tensor=tensor,
+              src=src_rank,
+              tag=tag)
+    tensor = tensor.cuda()
 
     assert tensor.is_cuda
     return tensor
@@ -687,26 +770,27 @@ def _send(tensor, tensor_name, src_rank, dst_rank, tag, sub_process_group=None):
     If tensor is being sent not via broadcast(), it will
     be first copied to the CPU.
     """
-    if sub_process_group is not None:
-        assert tensor.is_cuda
+    # if sub_process_group is not None:
+    #     assert tensor.is_cuda
+    #
+    #     # Send tensor shape.
+    #     tensor_shape = torch.tensor(tensor.shape, dtype=torch.int)
+    #     dist.broadcast(tensor=tensor_shape, src=src_rank,
+    #                   group=sub_process_group)
+    #     #print(tensor_shape)
+    #     # Send tensor.
+    #     contiguous_tensor = tensor.detach().clone()
+    #     dist.broadcast(tensor=contiguous_tensor.contiguous(),
+    #                    src=src_rank,
+    #                    group=sub_process_group)
+    # else:
+    assert tensor.is_cuda
+    tensor = tensor.cpu()
 
-        # Send tensor shape.
-        tensor_shape = torch.tensor(tensor.shape, dtype=torch.int)
-        dist.broadcast(tensor=tensor_shape, src=src_rank,
-                      group=sub_process_group)
+    # Send tensor shape.
+    tensor_shape = torch.tensor(tensor.shape, dtype=torch.int)
+    # print(tensor_shape)
+    dist.send(tensor=tensor_shape, dst=dst_rank, tag=tag)
 
-        # Send tensor.
-        contiguous_tensor = tensor.detach().clone()
-        dist.broadcast(tensor=contiguous_tensor.contiguous(),
-                       src=src_rank,
-                       group=sub_process_group)
-    else:
-        assert tensor.is_cuda
-        tensor = tensor.cpu()
-
-        # Send tensor shape.
-        tensor_shape = torch.tensor(tensor.shape, dtype=torch.int)
-        dist.send(tensor=tensor_shape, dst=dst_rank, tag=tag)
-
-        # Send tensor.
-        dist.send(tensor=tensor, dst=dst_rank, tag=tag)
+    # Send tensor.
+    dist.send(tensor=tensor, dst=dst_rank, tag=tag)

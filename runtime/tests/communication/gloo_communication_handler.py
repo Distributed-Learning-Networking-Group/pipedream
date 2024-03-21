@@ -4,15 +4,17 @@
 import argparse
 import time
 import torch
-
+import threading
 import sys
 sys.path.append("../..")
 import communication
 
 NUM_TRIALS = 20
-
+event=threading.Event()
 
 if __name__ == '__main__':
+
+    print(communication)
     parser = argparse.ArgumentParser(
         description='Test lightweight communication library')
     parser.add_argument("--master_addr", required=True, type=str,
@@ -23,7 +25,7 @@ if __name__ == '__main__':
                         help="Port used to communicate tensors")
     parser.add_argument("--broadcast", action='store_true',
                         help="Broadcast within a server")
-
+    # parser.add_argument("--local_rank", required=True, type=int)
     args = parser.parse_args()
 
     num_ranks_in_server = 1
@@ -41,11 +43,14 @@ if __name__ == '__main__':
         num_ranks_in_server=num_ranks_in_server,
         world_size=2,
         fp16=False,
-        backend='gloo'
+        backend='gloo',
+        EVENT=event,
+        EVENT1=event
     )
 
-    tensor_sizes = [10, 100, 1000, 10000, 100000, 1000000, 10000000,
-                    100000000, 800000000]
+
+    tensor_sizes = [10, 100, 1000, 10000, 32*64*224*224, 64*128*56*56
+,64*512*28*28]
 
     receive_ranks = {}
     send_ranks = {}
@@ -61,7 +66,6 @@ if __name__ == '__main__':
         tensor_tags[tensor_name] = tag
         training_tensor_dtypes[tensor_name] = torch.float32
         tensor_shapes[tensor_name] = (tensor_size,)
-
     # Populate fields for ack.
     tensor_tags["ack"] = tag + 1
     tensor_shapes["ack"] = (1,)
@@ -78,52 +82,81 @@ if __name__ == '__main__':
         rank_in_stage=0,
         num_ranks_in_stage=1,
         ranks_in_previous_stage=ranks_in_previous_stage,
-        ranks_in_next_stage=ranks_in_next_stage)
+        ranks_in_next_stage=ranks_in_next_stage
+        )
+
     comm_handler.set_tensor_shapes(tensor_shapes)
     comm_handler.start_helper_threads(num_iterations=NUM_TRIALS,
                                       forward_only=True)
-
+    print(comm_handler.forward_receive_queues)
+    print(comm_handler.forward_send_queues)
+    print(comm_handler.backward_receive_queues)
+    print(comm_handler.backward_send_queues)
+    # print("list")
+    # print(comm_handler.connection_list)
+    #
+    # print("process group")
+    # print(comm_handler.process_groups)
+    #
+    # print("message")
+    # print(comm_handler.messaging_schedule)
+    #print(len(threading.enumerate()))
     for i, tensor_size in enumerate(tensor_sizes):
+        # if i<len(tensor_sizes)-1:
         tensor_name = "out%d" % i
+        # else:
+        #tensor_name="signal"
+        if i==len(tensor_sizes)+1:
+            event.set()
+
         if args.rank == 0:
             tensor = torch.tensor(range(tensor_size),
                                   dtype=torch.float32).cuda(local_rank)
+
+            print(tensor.element_size()*tensor.numel()/1024/1024)
             torch.distributed.barrier()
             start_time = time.time()
-            for j in range(NUM_TRIALS):
+            for j in range(NUM_TRIALS-1):
                 comm_handler.send(tensor_name, tensor,
                                   forward_minibatch_id=j,
                                   backward_minibatch_id=j,
                                   backward=False)
+                
+
+
         else:
+
             torch.distributed.barrier()
             start_time = time.time()
-            for j in range(NUM_TRIALS):
+            for j in range(NUM_TRIALS-1):
                 tensor = comm_handler.recv(tensor_name,
                                            forward_minibatch_id=j,
                                            backward_minibatch_id=j,
                                            backward=False)
+
+
+
+        
         torch.distributed.barrier()
         average_time = (time.time() - start_time) / NUM_TRIALS
         if args.rank == 1:  # Only time recvs since sends are asynchronous.
             print("Time to receive %s MB: %.3f seconds" % (
-                (tensor_size * 4) / 10**6,
+                (tensor_size * 4) / 10 ** 6,
                 average_time))
             throughput = (tensor_size * 4) / average_time
-            print("Throughput: %.3f GB/s" % (throughput / 10**9))
+            print("Throughput: %.3f GB/s" % (throughput / 10 ** 9))
 
     # Send and receive acks to flush the ack helper threads.
     ack_tensor = torch.zeros((1,), dtype=torch.int64).cuda()
-    for j in range(NUM_TRIALS):
-        if args.rank == 1:
-             comm_handler.send("ack", ack_tensor,
-                               forward_minibatch_id=j,
-                               backward_minibatch_id=j,
-                               backward=True)
-        else:
-            comm_handler.recv("ack",
-                              forward_minibatch_id=j,
-                              backward_minibatch_id=j,
-                              backward=True)
+    # for j in range(NUM_TRIALS):
+    #     if args.rank == 1:
+    #          comm_handler.send("ack", ack_tensor,
+    #                            forward_minibatch_id=j,
+    #                            backward_minibatch_id=j,
+    #                            backward=True)
+    #     else:
+    #         comm_handler.recv("ack",
+    #                           forward_minibatch_id=j,
+    #                           backward_minibatch_id=j,
+    #                           backward=True)
 
-    comm_handler.wait()
