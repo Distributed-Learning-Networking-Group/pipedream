@@ -697,7 +697,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                       'Loss: {loss.val:.4f} ({loss.avg:.4f})\t'
                       'Prec@1: {top1.val:.3f} ({top1.avg:.3f})\t'
                       'Prec@5: {top5.val:.3f} ({top5.avg:.3f})\t'
-                      'Running Time: {time}'.format(
+                      'Running Time: {time:.3f}'.format(
                           epoch, i, n, batch_time=batch_time,
                           epoch_time=epoch_time, full_epoch_time=full_epoch_time,
                           loss=losses, top1=top1, top5=top5,
