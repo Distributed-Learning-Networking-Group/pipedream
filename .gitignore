@@ -1,4 +1,5 @@
 data/
 *.pyc
 *.pdf
-.vscode
+.vscode/*
+__pycache__
