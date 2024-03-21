@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+import sgd
+import runtime
 import numpy
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -26,12 +28,12 @@ import numpy as np
 import random
 
 sys.path.append("..")
-import runtime
-import sgd
 
 
 EVENT = threading.Event()
 EVENT1 = threading.Event()
+
+START_TIME = time.time()
 
 
 def setup_seed(seed):
@@ -694,12 +696,13 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                       'Memory: {memory:.3f} ({cached_memory:.3f})\t'
                       'Loss: {loss.val:.4f} ({loss.avg:.4f})\t'
                       'Prec@1: {top1.val:.3f} ({top1.avg:.3f})\t'
-                      'Prec@5: {top5.val:.3f} ({top5.avg:.3f})'.format(
+                      'Prec@5: {top5.val:.3f} ({top5.avg:.3f})\t'
+                      'Running Time: {time}'.format(
                           epoch, i, n, batch_time=batch_time,
                           epoch_time=epoch_time, full_epoch_time=full_epoch_time,
                           loss=losses, top1=top1, top5=top5,
                           memory=(float(torch.cuda.memory_allocated()) / 10**9),
-                          cached_memory=(float(torch.cuda.memory_cached()) / 10**9)))
+                          cached_memory=(float(torch.cuda.memory_cached()) / 10**9), time=time.time()-START_TIME))
                 import sys
                 sys.stdout.flush()
         else:
