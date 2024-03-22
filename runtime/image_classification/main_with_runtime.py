@@ -812,7 +812,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
 
         if i == 500 and epoch == 2:
             def save_list_to_txt(data, filename):
-                numpy.savetxt(filename, data)
+                np.savetxt(filename, data)
             if is_last_stage():
                 save_list_to_txt(forward_list, "data1.txt")
                 save_list_to_txt(batch_list_all, "data3_0.txt")
