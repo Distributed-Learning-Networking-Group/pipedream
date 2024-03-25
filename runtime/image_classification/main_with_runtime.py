@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import torch.utils.data.distributed
@@ -23,12 +24,9 @@ import threading
 import argparse
 import numpy as np
 import random
-sys.path.append("..")
-import sgd
+sys.path.append("..")  # nopep8
 import runtime
-
-
-
+import sgd
 
 EVENT = threading.Event()
 EVENT1 = threading.Event()
@@ -47,7 +45,7 @@ def setup_seed(seed):
 # 设置随机数种子
 setup_seed(2)
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-parser.add_argument('--data_dir', type=str,
+parser.add_argument('--data_dir', type=str, default='',
                     help='path to dataset')
 parser.add_argument('--distributed_backend', type=str,
                     help='distributed backend to use (gloo|nccl)')
@@ -59,8 +57,8 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
-                    metavar='N', help='mini-batch size (default: 256)')
+parser.add_argument('-b', '--batch-size', default=16, type=int,
+                    metavar='N', help='mini-batch size (default: 16)')
 parser.add_argument('--eval-batch-size', default=100, type=int,
                     help='eval mini-batch size (default: 100)')
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
