@@ -6,23 +6,23 @@ import model_detail
 from torchvision.models import vgg16
 import torch.nn as nn
 # initial 动态规划目标矩阵layers stages replicate_time gpus
+# w(layers, sum_gpus, stage_num, replicate_times)
 w = numpy.zeros((200, 10, 10, 10))
 # transfer_channel = []  # perf 多机之间的带宽
 # per layer sum time compute f+b 序号从1开始
 # parameter_size = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 每层的梯度大小
 process_time = []  # 前向计算与方向计算时间之和
-DNN_per_layer_compute_time_foward = []  # 每层的前向计算时间
-DNN_per_layer_compute_time_backward = []  # 每层的反向计算时间
-DNN_per_layer_activation = []  # 每层的激活量 前向给后向传的东西 out_put_size
+DNN_per_layer_compute_time_foward = [0]  # 每层的前向计算时间
+DNN_per_layer_compute_time_backward = [0]  # 每层的反向计算时间
+DNN_per_layer_activation = [0]  # 每层的激活量 前向给后向传的东西 out_put_size
+DNN_per_layer_gradients = [0]  # 每层更新时候的梯度 optimizer.step()呢部分的
 
-DNN_per_layer_gradients = []  # 每层更新时候的梯度 optimizer.step()呢部分的
-
-GPUS_order_list = [0, 0, 1, 2, 3]  # gpu之间带宽由高到低，里面应该是gpu的id
+GPUS_order_list = [0]  # gpu之间带宽由高到低，里面应该是gpu的id
 GPUS_bandwidth = []  # 10Gbps to MByte
 
 
 PIPEDREAM_FLAG = 1
-GPU_NUM = 4
+GPU_NUM = 8
 DIR = "profile"
 DEP_IDX = 2
 
@@ -68,9 +68,10 @@ def data_init(layers_detail):
             32/8/1024/1024  # shape*float32 to MByte
         DNN_per_layer_gradients.append(per_layer_gradients_size)
 
-    # init GPUS_bandwidth
+    # init GPUS_bandwidth GPUS_order_list
     for index in range(0, GPU_NUM):
         GPUS_bandwidth.append([1280, 1280, 1280, 1280])
+        GPUS_order_list.append(index)
 
 
 def compute_all_reduce_time(ngpus, start_layer, end_layer, set_gpu):
@@ -204,15 +205,17 @@ def compute_stage_partition_pipedream(layers, n_gpus, stages, replicate_times, F
 
 
 if __name__ == '__main__':
-    # w(layers, sum_gpus, stage_num, replicate_times)
+
     layers_detail = model_detail.model_info(
         vgg16(pretrained=False), batch_size=16).layers_info
     data_init(layers_detail)
 
     for i in range(1, 1+GPU_NUM):
         for j in range(1, 1+GPU_NUM):
-            time, sets, match = compute_stage_partition(10, 4, i, j, {}, [])
-            # print(i, j)
+            time, sets, match = compute_stage_partition(
+                38, GPU_NUM, i, j, {}, [])
+
+            print(f'stage_num:{i} copy_time:{j}')
             print(f'time:{time}')
             print(f'sets:{sets}')
             print(f'match:{match}\n')
