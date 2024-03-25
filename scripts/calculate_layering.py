@@ -22,7 +22,7 @@ GPUS_bandwidth = []  # 10Gbps to MByte
 
 
 PIPEDREAM_FLAG = 1
-GPU_NUM = 4
+GPU_NUM = 8
 DIR = "profile"
 DEP_IDX = 2
 
@@ -212,7 +212,7 @@ if __name__ == '__main__':
     for i in range(1, 1+GPU_NUM):
         for j in range(1, 1+GPU_NUM):
             time, sets, match = compute_stage_partition(10, 4, i, j, {}, [])
-            print(i, j)
-            print(time)
-            print(sets)
-            print(match)
+            # print(i, j)
+            print(f'time:{time}')
+            print(f'sets:{sets}')
+            print(f'match:{match}\n')
