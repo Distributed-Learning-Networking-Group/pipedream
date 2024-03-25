@@ -440,6 +440,7 @@ class StageRuntime:
             self.stage = rank_to_stage_map[self.rank]
             self.rank_in_stage = stage_to_rank_map[self.stage].index(self.rank)
             self.num_ranks_in_stage = len(stage_to_rank_map[self.stage])
+            self.loss_scale = float(1/self.num_ranks_in_stage)
             self.num_ranks_in_first_stage = len(stage_to_rank_map[0])
             self.num_ranks_in_previous_stage = 0
             self.ranks_in_previous_stage = []

@@ -562,7 +562,7 @@ def main():
             if r.stage != r.num_stages:
                 prec1 = 0
 
-            # validate(val_loader, r, epoch)
+            validate(val_loader, r, epoch)
             # remember best prec@1 and save checkpoint
             best_prec1 = max(prec1, best_prec1)
 
@@ -673,8 +673,8 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
             r.run_forward(stopped=True)
         else:
             r.run_forward()
-        adjust_learning_rate(optimizer, epoch, args.epochs,
-                             r, args.lr_policy, i, n)
+        # adjust_learning_rate(optimizer, epoch, args.epochs,
+        #                      r, args.lr_policy, i, n)
         if is_last_stage():
             # measure accuracy and record loss
             output, target, loss = r.output, r.target, r.loss
@@ -893,7 +893,10 @@ def validate(val_loader, r, epoch):
 
         for i in range(n):
             # perform forward pass
-            r.run_forward()
+            if i == n-1:
+                r.run_forward(stopped=True)
+            else:
+                r.run_forward()
             # r.run_ack()
 
             if is_last_stage():
