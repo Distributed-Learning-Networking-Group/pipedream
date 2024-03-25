@@ -63,7 +63,7 @@ class Vgg16():
                         inputs.append(arg)
                 if out[0] not in outputs:
                     outputs.append(out[0])
-
+        declare.append("self._initialize_weights()")
         return declare, calculation, inputs, outputs
 
 
@@ -156,7 +156,18 @@ class Stage(torch.nn.Module):
     def cp_forward(self, *args):
         exec(self.cp)
         return self.cp_out
-
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d):
+                torch.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    torch.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, torch.nn.BatchNorm2d):
+                torch.nn.init.constant_(m.weight, 1)
+                torch.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, torch.nn.Linear):
+                torch.nn.init.normal_(m.weight, 0, 0.01)
+                torch.nn.init.constant_(m.bias, 0)
 def replace(inputs):
     for i in range(len(inputs)):
         if inputs[i] == 'out0':
