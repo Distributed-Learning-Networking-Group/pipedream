@@ -16,8 +16,8 @@ hybrid_conf_json = json.dumps(hybrid_conf, separators=(',', ':'))
 batch_size = [int(batch/len(stage_to_rank_map[chr(i+48)]))
               for i in range(0, stage_num)]
 batch_size_all = [batch]
-partition_config = {'partition': partition, 'recompute_ratio': [
-    0, 0], 'batch_size_all': batch_size_all, 'batch_size': batch_size}
+partition_config = {'partition': partition, 'recompute_ratio': [0 for _ in range(
+    0, stage_num)], 'batch_size_all': batch_size_all, 'batch_size': batch_size}
 partition_config_json = json.dumps(partition_config, separators=(',', ':'))
 with open('../runtime/image_classification/models/'+model+'/gpus='+str(gpu_num)+'/hybrid_conf.json', 'w') as hybrid_conf_json_file:
     hybrid_conf_json_file.write(hybrid_conf_json)
