@@ -3,7 +3,7 @@ import os
 import numpy
 import math
 import model_detail
-from torchvision.models import vgg16
+import torchvision.models
 import torch.nn as nn
 # initial 动态规划目标矩阵layers stages replicate_time gpus
 # w(layers, sum_gpus, stage_num, replicate_times)
@@ -18,13 +18,17 @@ DNN_per_layer_activation = [0]  # 每层的激活量 前向给后向传的东西
 DNN_per_layer_gradients = [0]  # 每层更新时候的梯度 optimizer.step()呢部分的
 
 GPUS_order_list = [0]  # gpu之间带宽由高到低，里面应该是gpu的id
-GPUS_bandwidth = []  # 10Gbps to MByte
+GPUS_bandwidth = []  # 10Gbps to MByte/s
 
 
-PIPEDREAM_FLAG = 1
-GPU_NUM = 8
+PIPEDREAM_FLAG = 0
+GPU_NUM = 4
 DIR = "profile"
 DEP_IDX = 2
+LAYERS_NUM = 38
+GPUS_BANDWIDTH = 1280  # Mbyte/s
+MODEL = torchvision.models.vgg16()
+BATCH_SIZE = 16
 
 
 def read_file(filename):
@@ -70,8 +74,29 @@ def data_init(layers_detail):
 
     # init GPUS_bandwidth GPUS_order_list
     for index in range(0, GPU_NUM):
-        GPUS_bandwidth.append([1280, 1280, 1280, 1280])
+        GPUS_bandwidth.append([GPUS_BANDWIDTH for _ in range(0, GPU_NUM)])
         GPUS_order_list.append(index)
+
+
+def format_to_config(match):
+    partition = []
+    layer_num = 0
+    stage_to_rank_map = {}
+    gpu_use = [1 for _ in range(0, GPU_NUM)]
+    for index, key in enumerate(match):
+        partition.append(len(key))
+        layer_num += len(key)
+        stage_to_rank_map[chr(49+index)] = list(match[key])
+        for gpu in list(match[key]):
+            gpu_use[gpu] = 0
+    partition.insert(0, LAYERS_NUM-layer_num)
+    stage_to_rank_map['0'] = []
+    for index, gpu in enumerate(gpu_use):
+        if gpu:
+            stage_to_rank_map['0'].append(index)
+    stage_to_rank_map = dict(sorted(stage_to_rank_map.items()))
+    print(f'partition = {partition}')
+    print(f'stage_to_rank_map={stage_to_rank_map}\n')
 
 
 def compute_all_reduce_time(ngpus, start_layer, end_layer, set_gpu):
@@ -207,15 +232,23 @@ def compute_stage_partition_pipedream(layers, n_gpus, stages, replicate_times, F
 if __name__ == '__main__':
 
     layers_detail = model_detail.model_info(
-        vgg16(pretrained=False), batch_size=16).layers_info
+        MODEL, batch_size=BATCH_SIZE).layers_info
     data_init(layers_detail)
 
     for i in range(1, 1+GPU_NUM):
         for j in range(1, 1+GPU_NUM):
-            time, sets, match = compute_stage_partition(
-                38, GPU_NUM, i, j, {}, [])
+            if PIPEDREAM_FLAG:
+                time, sets, match = compute_stage_partition_pipedream(
+                    LAYERS_NUM, GPU_NUM, i, j, {}, [])
+            else:
+                time, sets, match = compute_stage_partition(
+                    LAYERS_NUM, GPU_NUM, i, j, {}, [])
 
-            print(f'stage_num:{i} copy_time:{j}')
-            print(f'time:{time}')
-            print(f'sets:{sets}')
-            print(f'match:{match}\n')
+            if time != float('inf'):
+
+                print(f'stage_num:{i} copy_time:{j}')
+                print(f'time:{time}')
+                print(f'sets:{sets}')
+                print(f'match:{match}')
+
+                format_to_config(match)
