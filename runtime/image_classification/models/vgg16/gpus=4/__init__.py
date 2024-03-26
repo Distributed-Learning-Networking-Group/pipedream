@@ -9,8 +9,10 @@ import torch
 import numpy as np
 import random
 
+
 def arch():
     return "vgg16"
+
 
 def model(criterion):
     return [
@@ -19,8 +21,10 @@ def model(criterion):
         (criterion, ["out1"], ["loss"])
     ]
 
+
 def full_model():
     return VGG16Partitioned()
+
 
 class Vgg16():
     def __init__(self, declares, calculations):
@@ -40,7 +44,7 @@ class Vgg16():
             if 'out32' not in line:
                 self.blocks.append([])
         # print(self.layers)
-        #print("len blocks",len(self.blocks))
+        # print("len blocks",len(self.blocks))
         # print(len(self.layers))
         # print(len(self.blocks))
         # print("end")
@@ -81,8 +85,10 @@ class Stage(torch.nn.Module):
         back = int(fraction * len(calcus))
         # print(back)
         if back == len(calcus):
-            no_cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(inputs)]
-            no_cp_.append("cp_out = cp.checkpoint(self.cp_forward, {}, self.dummy)".format(','.join(inputs)))
+            no_cp_ = ["{} = args[{}]".format(name, i)
+                      for i, name in enumerate(inputs)]
+            no_cp_.append("cp_out = cp.checkpoint(self.cp_forward, {}, self.dummy)".format(
+                ','.join(inputs)))
 
             cp_ = calcus
             cp_i = 0
@@ -96,7 +102,8 @@ class Stage(torch.nn.Module):
                 else:
                     no_cp_return.append(output)
 
-            cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(inputs)] + cp_
+            cp_ = ["{} = args[{}]".format(name, i)
+                   for i, name in enumerate(inputs)] + cp_
             cp_.append("self.cp_out = ({},)".format(', '.join(cp_return)))
             no_cp_.append("self.out = ({},)".format(', '.join(no_cp_return)))
 
@@ -106,7 +113,8 @@ class Stage(torch.nn.Module):
             self.cp = "assert 1 == 0"
             no_cp_ = calcus
 
-            no_cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(inputs)] + no_cp_
+            no_cp_ = ["{} = args[{}]".format(name, i)
+                      for i, name in enumerate(inputs)] + no_cp_
             no_cp_.append("self.out = ({})".format(', '.join(outputs)))
 
             self.no_cp = '\n'.join(no_cp_)
@@ -114,7 +122,8 @@ class Stage(torch.nn.Module):
             no_cp_ = calcus[:-back]
             cp_ = calcus[-back:]
 
-            no_cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(inputs)] + no_cp_
+            no_cp_ = ["{} = args[{}]".format(name, i)
+                      for i, name in enumerate(inputs)] + no_cp_
 
             cp_inputs = []
             cp_outputs = []
@@ -137,9 +146,11 @@ class Stage(torch.nn.Module):
                 else:
                     no_cp_return.append(output)
 
-            no_cp_.append("cp_out = cp.checkpoint(self.cp_forward, {})".format(', '.join(cp_inputs)))
+            no_cp_.append("cp_out = cp.checkpoint(self.cp_forward, {})".format(
+                ', '.join(cp_inputs)))
             no_cp_.append("self.out = ({},)".format(', '.join(no_cp_return)))
-            cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(cp_inputs)] + cp_
+            cp_ = ["{} = args[{}]".format(name, i)
+                   for i, name in enumerate(cp_inputs)] + cp_
             cp_.append("self.cp_out = ({},)".format(', '.join(cp_return)))
 
             self.cp = '\n'.join(cp_)
@@ -156,10 +167,12 @@ class Stage(torch.nn.Module):
     def cp_forward(self, *args):
         exec(self.cp)
         return self.cp_out
+
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, torch.nn.Conv2d):
-                torch.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                torch.nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu')
                 if m.bias is not None:
                     torch.nn.init.constant_(m.bias, 0)
             elif isinstance(m, torch.nn.BatchNorm2d):
@@ -168,6 +181,8 @@ class Stage(torch.nn.Module):
             elif isinstance(m, torch.nn.Linear):
                 torch.nn.init.normal_(m.weight, 0, 0.01)
                 torch.nn.init.constant_(m.bias, 0)
+
+
 def replace(inputs):
     for i in range(len(inputs)):
         if inputs[i] == 'out0':
@@ -177,6 +192,8 @@ def replace(inputs):
         # elif inputs[i] == 'out2':
         #     inputs[i] = 'input2'
     return inputs
+
+
 def model_vgg16(criterion, partition, recompute_ratio):
     _declares = get_declares()
     _calculations = get_caculations()
@@ -212,12 +229,18 @@ def model_vgg16(criterion, partition, recompute_ratio):
     # print(type(Stage(inputs[0], outputs[0], declares[0], calculations[0], recompute_ratio[0])))
     return [
         (
-            Stage(inputs[0], outputs[0], declares[0], calculations[0], recompute_ratio[0]), replace(inputs[0]),
+            Stage(inputs[0], outputs[0], declares[0], calculations[0],
+                  recompute_ratio[0]), replace(inputs[0]),
             outputs[0]),
         (
-            Stage(inputs[1], outputs[1], declares[1], calculations[1], recompute_ratio[1]), replace(inputs[1]),
+            Stage(inputs[1], outputs[1], declares[1], calculations[1],
+                  recompute_ratio[1]), replace(inputs[1]),
             outputs[1]),
-        (criterion, outputs[1], ["loss"])
+        (
+            Stage(inputs[2], outputs[2], declares[2], calculations[2],
+                  recompute_ratio[2]), replace(inputs[2]),
+            outputs[2]),
+        (criterion, outputs[2], ["loss"])
     ]
 
 
@@ -260,6 +283,8 @@ self.layer38 = torch.nn.Linear(in_features=4096, out_features=4096, bias=True)
 self.layer39 = torch.nn.ReLU()
 self.layer40 = torch.nn.Dropout(p=0.5)
 self.layer41 = torch.nn.Linear(in_features=4096, out_features=10, bias=True)'''
+
+
 def get_caculations():
     return '''out2 = self.layer2(out0)
 out3 = self.layer3(out2)
