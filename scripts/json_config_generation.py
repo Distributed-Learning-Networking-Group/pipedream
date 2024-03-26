@@ -1,6 +1,6 @@
 import json
-partition = [7, 6, 25]
-stage_to_rank_map = {'0': [0, 1], '1': [2], '2': [3]}
+partition = [4, 3, 31]
+stage_to_rank_map = {'0': [0], '1': [1], '2': [2, 3]}
 batch = 36
 gpu_num = 4
 model = 'vgg16'
@@ -10,7 +10,7 @@ stage_num = len(stage_to_rank_map)
 module_to_stage_map = [i for i in range(0, stage_num)]
 module_to_stage_map.append(stage_num-1)
 hybrid_conf = {'module_to_stage_map': module_to_stage_map,
-               'stage_to_rank_map': stage_to_rank_map, 'stage_to_depth_map': {'0': 1, '1': 0}}
+               'stage_to_rank_map': stage_to_rank_map}
 hybrid_conf_json = json.dumps(hybrid_conf, separators=(',', ':'))
 
 batch_size = [int(batch/len(stage_to_rank_map[chr(i+48)]))
