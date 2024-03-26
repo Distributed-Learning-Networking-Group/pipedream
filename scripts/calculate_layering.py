@@ -249,6 +249,6 @@ if __name__ == '__main__':
                 print(f'stage_num:{i} copy_time:{j}')
                 print(f'time:{time}')
                 print(f'sets:{sets}')
-                print(f'match:{match}')
+                print(f'match:{match}\n')
 
                 format_to_config(match)

@@ -1,8 +1,8 @@
-from torchvision.models import vgg16
+import torchvision.models
 from torchsummary import summary  # pip install torch-summary
 import torch.nn as nn
 import re
-test_model = vgg16(pretrained=False)
+test_model = torchvision.models.vgg16(pretrained=False)
 
 
 class model_info():
