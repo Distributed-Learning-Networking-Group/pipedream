@@ -231,7 +231,7 @@ def model_vgg16(criterion, partition, recompute_ratio):
     for index in range(0, len(partition)):
         ret.append((
             Stage(inputs[index], outputs[index], declares[index], calculations[index], recompute_ratio[index]), replace(inputs[index]), outputs[index]))
-    ret.append((criterion, outputs[len(partition)], ["loss"]))
+    ret.append((criterion, outputs[len(partition)-1], ["loss"]))
     return ret
 
 
