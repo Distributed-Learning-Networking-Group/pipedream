@@ -10,9 +10,10 @@ import torch.distributed as dist
 
 NUM_TRIALS = 20
 
+
 def receive_tensor_helper(tensor, src_rank, group, tag, num_iterations,
                           broadcast):
-    dist.barrier() 
+    dist.barrier()
     start_time = time.time()
     for i in range(num_iterations):
         if broadcast:
@@ -25,9 +26,10 @@ def receive_tensor_helper(tensor, src_rank, group, tag, num_iterations,
     throughput = (size * 4. * num_iterations) / (
         (end_time - start_time) * 10**9)
     print("Time to receive %s MB: %.3f seconds" %
-        ((size * 4.) / 10**6,
-         (end_time - start_time) / num_iterations))
+          ((size * 4.) / 10**6,
+           (end_time - start_time) / num_iterations))
     print("Throughput: %.3f GB/s" % throughput)
+
 
 def send_tensor_helper(tensor, dst_rank, group, tag, num_iterations,
                        broadcast):
@@ -62,14 +64,15 @@ if __name__ == '__main__':
     num_ranks_in_server = 1
     if args.broadcast:
         num_ranks_in_server = 2
-    local_rank = args.rank
+    local_rank = 0
     torch.cuda.set_device(local_rank)
     print("Local rank: %d" % local_rank)
 
     os.environ['MASTER_ADDR'] = args.master_addr
     os.environ['MASTER_PORT'] = str(args.master_port)
     world_size = 2
-    dist.init_process_group(args.backend, rank=args.rank, world_size=world_size)
+    dist.init_process_group(
+        args.backend, rank=args.rank, world_size=world_size)
 
     tensor_sizes = [10, 100, 1000, 10000, 100000, 1000000, 10000000,
                     100000000, 800000000]

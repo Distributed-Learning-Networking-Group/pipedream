@@ -14,9 +14,9 @@ w = numpy.zeros((200, 10, 10, 10))
 process_time = []  # 前向计算与方向计算时间之和
 DNN_per_layer_compute_time_foward = [0]  # 每层的前向计算时间
 DNN_per_layer_compute_time_backward = [0]  # 每层的反向计算时间
+
 DNN_per_layer_activation = [0]  # 每层的激活量 前向给后向传的东西 out_put_size
 DNN_per_layer_gradients = [0]  # 每层更新时候的梯度 optimizer.step()呢部分的
-
 GPUS_order_list = [0]  # gpu之间带宽由高到低，里面应该是gpu的id
 GPUS_bandwidth = []  # 10Gbps to MByte/s
 
@@ -26,8 +26,8 @@ GPU_NUM = 4
 DIR = "profile"
 DEP_IDX = 2
 LAYERS_NUM = 38
-GPUS_BANDWIDTH = 1280  # Mbyte/s
-MODEL = torchvision.models.vgg16()
+GPUS_BANDWIDTH = 128  # Mbyte/s
+# MODEL = torchvision.models.vgg16()
 BATCH_SIZE = 16
 
 
@@ -52,11 +52,14 @@ def data_init(layers_detail):
             list = read_file(file_names[file_index])
             for i in list:
                 DNN_per_layer_compute_time_foward.append(float(i))
-
+        # elif 'out_put_' in file_names[file_index]:
+        #     list = read_file(file_names[file_index])
+        #     for i in list:
+        #         per_layer_shape = list(list[i])
     # init process_time
     for index in range(0, len(DNN_per_layer_compute_time_foward)):
-        process_time.append(
-            DNN_per_layer_compute_time_foward[index]+DNN_per_layer_compute_time_backward[index])
+        process_time.append((
+            DNN_per_layer_compute_time_foward[index]+DNN_per_layer_compute_time_backward[index])/1000)
 
     # init DNN_per_layer_activation
     for index in range(0, len(layers_detail[DEP_IDX]['output_shape'])):
@@ -232,8 +235,12 @@ def compute_stage_partition_pipedream(layers, n_gpus, stages, replicate_times, F
 if __name__ == '__main__':
 
     layers_detail = model_detail.model_info(
-        MODEL, batch_size=BATCH_SIZE).layers_info
+        torchvision.models.vgg16(), batch_size=BATCH_SIZE).layers_info
+
     data_init(layers_detail)
+
+    print(sum(DNN_per_layer_compute_time_backward) +
+          sum(DNN_per_layer_compute_time_foward))
 
     for i in range(1, 1+GPU_NUM):
         for j in range(1, 1+GPU_NUM):
