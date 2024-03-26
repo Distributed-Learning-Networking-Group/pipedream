@@ -227,21 +227,12 @@ def model_vgg16(criterion, partition, recompute_ratio):
     # (criterion, ["out1"], ["loss"])
     # print("Stage(inputs[0], outputs[0], declares[0], calculations[0], recompute_ratio[0])")
     # print(type(Stage(inputs[0], outputs[0], declares[0], calculations[0], recompute_ratio[0])))
-    return [
-        (
-            Stage(inputs[0], outputs[0], declares[0], calculations[0],
-                  recompute_ratio[0]), replace(inputs[0]),
-            outputs[0]),
-        (
-            Stage(inputs[1], outputs[1], declares[1], calculations[1],
-                  recompute_ratio[1]), replace(inputs[1]),
-            outputs[1]),
-        (
-            Stage(inputs[2], outputs[2], declares[2], calculations[2],
-                  recompute_ratio[2]), replace(inputs[2]),
-            outputs[2]),
-        (criterion, outputs[2], ["loss"])
-    ]
+    ret = []
+    for index in range(0, len(partition)):
+        ret.append((
+            Stage(inputs[index], outputs[index], declares[index], calculations[index], recompute_ratio[index]), replace(inputs[index]), outputs[index]))
+    ret.append((criterion, outputs[len(partition)], ["loss"]))
+    return ret
 
 
 def get_declares():
