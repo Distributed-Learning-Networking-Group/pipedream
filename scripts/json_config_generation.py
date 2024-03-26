@@ -1,5 +1,5 @@
 import json
-partition = [10, 28]
+partition = [13, 25]
 stage_to_rank_map = {'0': [0, 1, 2], '1': [3]}
 batch = 36
 gpu_num = 4
