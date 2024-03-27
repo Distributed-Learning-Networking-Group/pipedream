@@ -21,7 +21,7 @@ GPUS_order_list = [0]  # gpu之间带宽由高到低，里面应该是gpu的id
 GPUS_bandwidth = []  # 10Gbps to MByte/s
 
 
-PIPEDREAM_FLAG = 1
+PIPEDREAM_FLAG = 0
 GPU_NUM = 4
 DIR = "profile"
 DEP_IDX = 2
