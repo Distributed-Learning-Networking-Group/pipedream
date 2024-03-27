@@ -26,8 +26,9 @@ GPU_NUM = 4
 DIR = "profile"
 DEP_IDX = 2
 LAYERS_NUM = 38
-GPUS_BANDWIDTH = 128  # Mbyte/s
-# MODEL = torchvision.models.vgg16()
+GPUS_BANDWIDTH = 886  # Mbyte/s
+ITER_NUM = 1000  # 测量for_bac_time时用了多少iteration
+MODEL = torchvision.models.vgg16()
 BATCH_SIZE = 16
 
 
@@ -59,7 +60,7 @@ def data_init(layers_detail):
     # init process_time
     for index in range(0, len(DNN_per_layer_compute_time_foward)):
         process_time.append((
-            DNN_per_layer_compute_time_foward[index]+DNN_per_layer_compute_time_backward[index])/1000)
+            DNN_per_layer_compute_time_foward[index]+DNN_per_layer_compute_time_backward[index])/ITER_NUM)
 
     # init DNN_per_layer_activation
     for index in range(0, len(layers_detail[DEP_IDX]['output_shape'])):
@@ -235,12 +236,9 @@ def compute_stage_partition_pipedream(layers, n_gpus, stages, replicate_times, F
 if __name__ == '__main__':
 
     layers_detail = model_detail.model_info(
-        torchvision.models.vgg16(), batch_size=BATCH_SIZE).layers_info
+        MODEL, batch_size=BATCH_SIZE).layers_info
 
     data_init(layers_detail)
-
-    print(sum(DNN_per_layer_compute_time_backward) +
-          sum(DNN_per_layer_compute_time_foward))
 
     for i in range(1, 1+GPU_NUM):
         for j in range(1, 1+GPU_NUM):
@@ -255,7 +253,7 @@ if __name__ == '__main__':
 
                 print(f'stage_num:{i} copy_time:{j}')
                 print(f'time:{time}')
-                print(f'sets:{sets}')
-                print(f'match:{match}\n')
+                # print(f'sets:{sets}')
+                # print(f'match:{match}\n')
 
                 format_to_config(match)
