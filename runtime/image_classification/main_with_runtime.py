@@ -182,8 +182,15 @@ def main():
 
     # model = module.model_vgg16(criterion, partition["partition"], partition["recompute_ratio"])
     setup_seed(2)
-    model_vgg = module.model_vgg16(
-        criterion, partition["partition"], partition["recompute_ratio"])
+    if 'vgg16' in args.config_path:
+        model_input = module.model_vgg16(
+            criterion, partition["partition"], partition["recompute_ratio"])
+    elif 'resnet50' in args.config_path:
+        model_input = module.model_resnet50(
+            criterion, partition["partition"], partition["recompute_ratio"])
+    elif 'resnet101' in args.config_path:
+        model_input = module.model_resnet101(
+            criterion, partition["partition"], partition["recompute_ratio"])
     # print("model")
     # print(model)
     # print("model_vgg")
@@ -229,7 +236,7 @@ def main():
     #         training_tensor_shapes[key])
 
     # Skip last layer (loss).
-    for module_id, (stage, inputs, outputs) in enumerate(model_vgg[:-1]):
+    for module_id, (stage, inputs, outputs) in enumerate(model_input[:-1]):
         # if module_id==0:
         #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 0)
         #     assert os.path.isfile(checkpoint_file_path)
@@ -291,7 +298,7 @@ def main():
     # if args.present_stage_id==1:
     #     args.loss_scale=float(1/3)
     r = runtime.StageRuntime(
-        model=model_vgg, distributed_backend=args.distributed_backend,
+        model=model_input, distributed_backend=args.distributed_backend,
         fp16=args.fp16, loss_scale=args.loss_scale,
         training_tensor_shapes=training_tensor_shapes1,
         eval_tensor_shapes=eval_tensor_shapes,
@@ -437,12 +444,13 @@ def main():
         if epoch == -1:
             print("partition", r.stage_nums)
             # model_vgg = module.model_vgg16(criterion, r.stage_nums.numpy().tolist(), [0, 0])
-            model_vgg = module.model_vgg16(criterion, [10, 8, 10, 10], [0, 0])
+            model_input = module.model_vgg16(
+                criterion, [10, 8, 10, 10], [0, 0])
             training_tensor_shapes1 = {
                 "input0": input_size, "target": [args.batch_size]}
             dtypes1 = {"input0": torch.float32, "target": torch.int64}
             # Skip last layer (loss).
-            for module_id, (stage, inputs, outputs) in enumerate(model_vgg[:-1]):
+            for module_id, (stage, inputs, outputs) in enumerate(model_input[:-1]):
                 input_tensors = []
                 for module_input in inputs:
                     if module_input in inputs_module_destinations1:
@@ -467,7 +475,7 @@ def main():
                     training_tensor_shapes1[key])
                 training_tensor_shapes1[key] = tuple(
                     training_tensor_shapes1[key])
-            r.initialize1(model_vgg, inputs_module_destinations, configuration_maps,
+            r.initialize1(model_input, inputs_module_destinations, configuration_maps,
                           args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server,
                           training_tensor_shapes1, dtypes1)
             torch.distributed.barrier()
@@ -552,7 +560,7 @@ def main():
             n_num = epoch*10
             train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
                   args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server, training_tensor_shapes1,
-                  dtypes1, target_tensor_names, n_num, model_vgg)
+                  dtypes1, target_tensor_names, n_num, model_input)
 
             # evaluate on validation set
             # prec1 = validate(val_loader, r, epoch)

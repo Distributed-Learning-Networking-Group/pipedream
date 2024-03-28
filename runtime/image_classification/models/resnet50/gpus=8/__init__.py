@@ -7,8 +7,11 @@ from .stage1 import Stage1
 from .stage2 import Stage2
 import torch
 import re
+
+
 def arch():
     return "resnet50"
+
 
 def model(criterion):
     return [
@@ -71,8 +74,10 @@ class Stage(torch.nn.Module):
         exec('\n'.join(declares))
         back = int(fraction * len(calcus))
         if back == len(calcus):
-            no_cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(inputs)]
-            no_cp_.append("cp_out = cp.checkpoint(self.cp_forward, {}, self.dummy)".format(','.join(inputs)))
+            no_cp_ = ["{} = args[{}]".format(name, i)
+                      for i, name in enumerate(inputs)]
+            no_cp_.append("cp_out = cp.checkpoint(self.cp_forward, {}, self.dummy)".format(
+                ','.join(inputs)))
 
             cp_ = calcus
             cp_i = 0
@@ -86,7 +91,8 @@ class Stage(torch.nn.Module):
                 else:
                     no_cp_return.append(output)
 
-            cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(inputs)] + cp_
+            cp_ = ["{} = args[{}]".format(name, i)
+                   for i, name in enumerate(inputs)] + cp_
             cp_.append("self.cp_out = ({},)".format(', '.join(cp_return)))
             no_cp_.append("self.out = ({},)".format(', '.join(no_cp_return)))
 
@@ -96,7 +102,8 @@ class Stage(torch.nn.Module):
             self.cp = "assert 1 == 0"
             no_cp_ = calcus
 
-            no_cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(inputs)] + no_cp_
+            no_cp_ = ["{} = args[{}]".format(name, i)
+                      for i, name in enumerate(inputs)] + no_cp_
             no_cp_.append("self.out = ({})".format(', '.join(outputs)))
 
             self.no_cp = '\n'.join(no_cp_)
@@ -104,7 +111,8 @@ class Stage(torch.nn.Module):
             no_cp_ = calcus[:-back]
             cp_ = calcus[-back:]
 
-            no_cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(inputs)] + no_cp_
+            no_cp_ = ["{} = args[{}]".format(name, i)
+                      for i, name in enumerate(inputs)] + no_cp_
 
             cp_inputs = []
             cp_outputs = []
@@ -127,13 +135,16 @@ class Stage(torch.nn.Module):
                 else:
                     no_cp_return.append(output)
 
-            no_cp_.append("cp_out = cp.checkpoint(self.cp_forward, {})".format(', '.join(cp_inputs)))
+            no_cp_.append("cp_out = cp.checkpoint(self.cp_forward, {})".format(
+                ', '.join(cp_inputs)))
             no_cp_.append("self.out = ({},)".format(', '.join(no_cp_return)))
-            cp_ = ["{} = args[{}]".format(name, i) for i, name in enumerate(cp_inputs)] + cp_
+            cp_ = ["{} = args[{}]".format(name, i)
+                   for i, name in enumerate(cp_inputs)] + cp_
             cp_.append("self.cp_out = ({},)".format(', '.join(cp_return)))
 
             self.cp = '\n'.join(cp_)
             self.no_cp = '\n'.join(no_cp_)
+
     def forward(self, *args):
         exec(self.no_cp)
         return self.out
@@ -141,13 +152,17 @@ class Stage(torch.nn.Module):
     def cp_forward(self, *args):
         exec(self.cp)
         return self.cp_out
+
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, torch.nn.Conv2d):
-                torch.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                torch.nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, torch.nn.BatchNorm2d):
                 torch.nn.init.constant_(m.weight, 1)
                 torch.nn.init.constant_(m.bias, 0)
+
+
 def replace(inputs):
     for i in range(len(inputs)):
         if inputs[i] == 'out0':
@@ -157,6 +172,8 @@ def replace(inputs):
         # elif inputs[i] == 'out2':
         #     inputs[i] = 'input2'
     return inputs
+
+
 def model_resnet50(criterion, partition, recompute_ratio):
     _declares = get_declares()
     _calculations = get_caculations()
@@ -185,15 +202,13 @@ def model_resnet50(criterion, partition, recompute_ratio):
             if name not in all_outputs[i] and name not in previous_output:
                 previous_output.append(name)
         outputs.insert(0, previous_output)
-    return [
-        (
-            Stage(inputs[0], outputs[0], declares[0], calculations[0], recompute_ratio[0]), replace(inputs[0]),
-            outputs[0]),
-        (
-            Stage(inputs[1], outputs[1], declares[1], calculations[1], recompute_ratio[1]), replace(inputs[1]),
-            outputs[1]),
-        (criterion, outputs[1], ["loss"])
-    ]
+
+    ret = []
+    for index in range(0, len(partition)):
+        ret.append((
+            Stage(inputs[index], outputs[index], declares[index], calculations[index], recompute_ratio[index]), replace(inputs[index]), outputs[index]))
+    ret.append((criterion, outputs[len(partition)-1], ["loss"]))
+    return ret
 
 
 def get_declares():
@@ -355,6 +370,8 @@ self.layer170 = torch.nn.BatchNorm2d(2048, eps=1e-05, momentum=0.1, affine=True,
 self.layer172 = torch.nn.ReLU()
 self.layer173 = torch.nn.AvgPool2d(kernel_size=7, stride=1, padding=0)
 self.layer176 = torch.nn.Linear(in_features=2048, out_features=1000, bias=True)'''
+
+
 def get_caculations():
     return '''out2 = self.layer2(out0)
 out3 = self.layer3(out2)

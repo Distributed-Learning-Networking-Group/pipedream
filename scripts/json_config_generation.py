@@ -22,7 +22,7 @@ partition_config_json = json.dumps(partition_config, separators=(',', ':'))
 with open('../runtime/image_classification/models/'+model+'/gpus='+str(gpu_num)+'/hybrid_conf.json', 'w') as hybrid_conf_json_file:
     hybrid_conf_json_file.write(hybrid_conf_json)
 
-with open('../runtime/image_classification/models/'+model+'/gpus='+str(gpu_num)+'/vgg_4.json', 'w') as partition_config_json_file:
+with open('../runtime/image_classification/models/'+model+'/gpus='+str(gpu_num)+'/vgg_'+str(gpu_num)+'.json', 'w') as partition_config_json_file:
     partition_config_json_file.write(partition_config_json)
 
 print(hybrid_conf_json)
