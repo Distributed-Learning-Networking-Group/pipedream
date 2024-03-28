@@ -678,8 +678,8 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
             r.run_forward(stopped=True)
         else:
             r.run_forward()
-        # adjust_learning_rate(optimizer, epoch, args.epochs,
-        #                      r, args.lr_policy, i, n)
+        adjust_learning_rate(optimizer, epoch, args.epochs,
+                             r, args.lr_policy, i, n)
         if is_last_stage():
             # measure accuracy and record loss
             output, target, loss = r.output, r.target, r.loss
