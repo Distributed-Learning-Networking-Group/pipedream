@@ -367,6 +367,7 @@ def main():
     # Data loading code
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
+    args.synthetic_data = False
 
     if args.arch == 'inception_v3':
         if args.synthetic_data:
@@ -395,20 +396,18 @@ def main():
                                                               transforms.Normalize(
                                                                   (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                                                           ]))
-
-    args.synthetic_data = False
     if args.synthetic_data:
         val_dataset = SyntheticDataset((3, 224, 224), 1000)
     else:
         valdir = os.path.join(args.data_dir, 'val')
-        val_dataset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                                   download=True, transform=transforms.Compose([
-                                                       transforms.Resize(
-                                                           (224, 224)),
-                                                       transforms.ToTensor(),
-                                                       transforms.Normalize(
-                                                           (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                                   ]))
+        val_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
+                                                    download=True, transform=transforms.Compose([
+                                                        transforms.Resize(
+                                                            (224, 224)),
+                                                        transforms.ToTensor(),
+                                                        transforms.Normalize(
+                                                            (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                                    ]))
 
     distributed_sampler = False
     train_sampler = None
@@ -598,8 +597,8 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
     time_for_send = 0
     flag = False
     # switch to train mode
-    # n = r.num_iterations(loader_size=len(train_loader))
-    n = 2083
+    n = r.num_iterations(loader_size=len(train_loader))
+    # n = 2083
 
     if args.num_minibatches is not None:
         n = min(n, args.num_minibatches)
