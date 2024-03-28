@@ -598,10 +598,10 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
     flag = False
     # switch to train mode
     # n = r.num_iterations(loader_size=len(train_loader))
-    n = 2083
+    n = 1000
 
     if args.num_minibatches is not None:
-        n = min(n, args.num_minibatches)
+        n = args.num_minibatches
 
     r.train(n, epoch)
     if not is_first_stage():
@@ -873,7 +873,7 @@ def validate(val_loader, r, epoch):
     # switch to evaluate mode
     n = r.num_iterations(loader_size=len(val_loader))
     if args.num_minibatches is not None:
-        n = min(n, args.num_minibatches)
+        n = args.num_minibatches
 
     r.eval(n, epoch)
     if not is_first_stage():
