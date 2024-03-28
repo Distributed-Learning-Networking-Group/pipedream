@@ -387,14 +387,14 @@ def main():
             train_dataset = SyntheticDataset((3, 224, 224), 1000000)
         else:
             traindir = os.path.join(args.data_dir, 'train')
-            train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True,
-                                                         transform=transforms.Compose([
-                                                             transforms.Resize(
-                                                                 (224, 224)),
-                                                             transforms.ToTensor(),
-                                                             transforms.Normalize(
-                                                                 (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                                         ]))
+            train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True,
+                                                          transform=transforms.Compose([
+                                                              transforms.Resize(
+                                                                  (224, 224)),
+                                                              transforms.ToTensor(),
+                                                              transforms.Normalize(
+                                                                  (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                                          ]))
 
     args.synthetic_data = False
     if args.synthetic_data:
