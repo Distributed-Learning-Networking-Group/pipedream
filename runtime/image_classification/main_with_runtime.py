@@ -1014,7 +1014,7 @@ def adjust_learning_rate(optimizer, epoch, total_epochs, r, lr_policy, step, epo
 
     else:
         if lr_policy == "step":
-            lr = stage_base_lr * (0.2 ** (epoch // 10))
+            lr = stage_base_lr * (0.4 ** (epoch // 10))
         elif lr_policy == "polynomial":
             power = 2.0
             lr = stage_base_lr * \
