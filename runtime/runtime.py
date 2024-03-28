@@ -106,7 +106,7 @@ class StageRuntime:
             self.layer_communication_list = [1000*float(x) for x in data]
 
         self.stage_num=stage_num
-        self.stage_nums=torch.tensor(stage_nums)   #
+        self.stage_nums=torch.tensor(worker_num_sum)   #
         self.straggle_for_stage_cmp=torch.ones(self.worker_num_sum,dtype=torch.float)  #
         self.straggle_for_stage_cal = torch.ones(self.worker_num_sum, dtype=torch.float)
         self.initial_status_cmp=torch.zeros(self.worker_num_sum, dtype=torch.float)    #
@@ -1131,25 +1131,49 @@ class StageRuntime:
         else:
             return
     def Send_Stage_nums(self,tag):
-        if self.stage==self.worker_num_sum-1:
+        if self.rank == self.worker_num_sum-1:
             for i in range(self.worker_num_sum-1):
                 dist.send(tensor=self.stage_nums, dst=i, tag=tag)
         else:
             return
     def Rec_Stage_nums(self,tag):
-        if self.stage!=self.worker_num_sum-1:
+        if self.rank != self.worker_num_sum-1:
             dist.recv(tensor=self.stage_nums, src=self.worker_num_sum-1, tag=tag)
         else:
             return
 
     def Send_initial(self,tag):
-        if self.stage==self.worker_num_sum-1:
+        if self.rank == self.worker_num_sum-1:
             for i in range(self.worker_num_sum-1):
                 dist.send(tensor=self.i_for_initial, dst=i, tag=tag)
         else:
             return
     def Rec_initial(self,tag):
-        if self.stage!=self.worker_num_sum-1:
+        if self.rank != self.worker_num_sum-1:
             dist.recv(tensor=self.i_for_initial, src=self.worker_num_sum-1, tag=tag)
         else:
             return
+    def Send_param(self,filename,dst):
+            with open(filename, 'rb') as f:
+                data = f.read()
+            # 首先，发送数据的大小
+            size = torch.tensor([len(data)], dtype=torch.long)
+            dist.send(tensor=size, dst=dst)
+            # 然后发送数据本身
+            buffer = torch.ByteTensor(list(bytearray(data)))
+            dist.send(tensor=buffer, dst=dst)
+    def Rec_param(self,recv_filename,recv_rank):
+        file_size_tensor = torch.tensor([0], dtype=torch.long)
+        dist.recv(tensor=file_size_tensor, src=recv_rank)
+
+        file_size = file_size_tensor.item()
+
+        # Preparing tensor for receiving file content
+        file_tensor = torch.ByteTensor(file_size)
+
+        # Receiving the file content
+        dist.recv(tensor=file_tensor, src=recv_rank)
+
+        # Writing out the received file content
+        with open(recv_filename, 'wb') as f:
+            f.write(file_tensor.numpy().tobytes())
