@@ -598,8 +598,8 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
     time_for_send = 0
     flag = False
     # switch to train mode
-    # n = r.num_iterations(loader_size=len(train_loader))
-    n = 780
+    n = r.num_iterations(loader_size=len(train_loader))
+    # n = 780
 
     if args.num_minibatches is not None:
         n = min(n, args.num_minibatches)
