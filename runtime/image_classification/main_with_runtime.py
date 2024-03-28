@@ -388,26 +388,26 @@ def main():
             train_dataset = SyntheticDataset((3, 224, 224), 1000000)
         else:
             traindir = os.path.join(args.data_dir, 'train')
-            train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True,
-                                                         transform=transforms.Compose([
+            train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True,
+                                                          transform=transforms.Compose([
                                                               transforms.Resize(
                                                                   (224, 224)),
                                                               transforms.ToTensor(),
                                                               transforms.Normalize(
                                                                   (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                                         ]))
+                                                          ]))
     if args.synthetic_data:
         val_dataset = SyntheticDataset((3, 224, 224), 1000)
     else:
         valdir = os.path.join(args.data_dir, 'val')
-        val_dataset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                                   download=True, transform=transforms.Compose([
+        val_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
+                                                    download=True, transform=transforms.Compose([
                                                         transforms.Resize(
                                                             (224, 224)),
                                                         transforms.ToTensor(),
                                                         transforms.Normalize(
                                                             (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                                   ]))
+                                                    ]))
 
     distributed_sampler = False
     train_sampler = None
@@ -872,8 +872,8 @@ def validate(val_loader, r, epoch):
 
     # switch to evaluate mode
     n = r.num_iterations(loader_size=len(val_loader))
-    if args.num_minibatches is not None:
-        n = args.num_minibatches
+    # if args.num_minibatches is not None:
+    # n = args.num_minibatches
 
     r.eval(n, epoch)
     if not is_first_stage():
