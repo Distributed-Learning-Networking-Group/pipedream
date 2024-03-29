@@ -882,7 +882,6 @@ def validate(val_loader, r, epoch):
 
     # switch to evaluate mode
     n = r.num_iterations(loader_size=len(val_loader))
-    print(f'n={n}')
     # if args.num_minibatches is not None:
     # n = args.num_minibatches
 
