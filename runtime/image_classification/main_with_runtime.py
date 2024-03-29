@@ -61,7 +61,7 @@ parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size (default: 16)')
 parser.add_argument('--eval-batch-size', default=100, type=int,
                     help='eval mini-batch size (default: 100)')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--lr_policy', default='step', type=str,
                     help='policy for controlling learning rate')
@@ -688,8 +688,8 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
             r.run_forward(stopped=True)
         else:
             r.run_forward()
-        adjust_learning_rate(optimizer, epoch, args.epochs,
-                             r, args.lr_policy, i, n)
+        # adjust_learning_rate(optimizer, epoch, args.epochs,
+        #                      r, args.lr_policy, i, n)
         if is_last_stage():
             # measure accuracy and record loss
             output, target, loss = r.output, r.target, r.loss
