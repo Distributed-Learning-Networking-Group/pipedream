@@ -45,7 +45,7 @@ def setup_seed(seed):
 # 设置随机数种子
 setup_seed(2)
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-parser.add_argument('--data_dir', type=str, default='',
+parser.add_argument('--data_dir', type=str, default='/home/nyt/pipedream/runtime/image_classification/data/mini_imagenet/',
                     help='path to dataset')
 parser.add_argument('--distributed_backend', type=str,
                     help='distributed backend to use (gloo|nccl)')
@@ -385,45 +385,39 @@ def main():
     else:
         import torchvision
         if args.synthetic_data:
-            train_dataset = SyntheticDataset((3, 224, 224), 1000000)
-        else:
-            # traindir = os.path.join(args.data_dir, 'train')
-            # train_dataset = datasets.ImageFolder(
-            #     traindir,
-            #     transforms.Compose([
-            #         transforms.RandomResizedCrop(224),
-            #         transforms.RandomHorizontalFlip(),
-            #         transforms.ToTensor(),
-            #         normalize,
-            #     ]))
-            traindir = os.path.join(args.data_dir, 'train')
-            train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True,
-                                                         transform=transforms.Compose([
+            train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True,
+                                                          transform=transforms.Compose([
                                                               transforms.Resize(
                                                                   (224, 224)),
                                                               transforms.ToTensor(),
-                                                              transforms.Normalize(
-                                                                  (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                                         ]))
+                                                              normalize,
+                                                          ]))
+        else:
+            traindir = os.path.join(args.data_dir, 'train')
+            train_dataset = datasets.ImageFolder(
+                traindir,
+                transforms.Compose([
+                    transforms.RandomResizedCrop(224),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    normalize,
+                ]))
     if args.synthetic_data:
-        val_dataset = SyntheticDataset((3, 224, 224), 1000)
-    else:
-        # valdir = os.path.join(args.data_dir, 'val')
-        # val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
-        #     transforms.Resize(256),
-        #     transforms.CenterCrop(224),
-        #     transforms.ToTensor(),
-        #     normalize,
-        # ]))
-        valdir = os.path.join(args.data_dir, 'val')
-        val_dataset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                                   download=True, transform=transforms.Compose([
+        val_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
+                                                    download=True, transform=transforms.Compose([
                                                         transforms.Resize(
                                                             (224, 224)),
                                                         transforms.ToTensor(),
-                                                        transforms.Normalize(
-                                                            (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                                   ]))
+                                                        normalize,
+                                                    ]))
+    else:
+        valdir = os.path.join(args.data_dir, 'test')
+        val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ]))
 
     distributed_sampler = False
     train_sampler = None
