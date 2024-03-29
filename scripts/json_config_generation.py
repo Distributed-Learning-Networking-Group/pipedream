@@ -1,6 +1,6 @@
 import json
-partition = [15, 5, 18]
-stage_to_rank_map = {'0': [0, 1, 2, 3, 4, 5], '1': [6], '2': [7]}
+partition = [10, 11, 17]
+stage_to_rank_map = {'0': [0, 1, 2, 3], '1': [4, 5, 6], '2': [7]}
 batch = 72
 gpu_num = 8
 model = 'vgg16'
