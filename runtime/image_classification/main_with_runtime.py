@@ -922,7 +922,7 @@ def validate(val_loader, r, epoch):
 
             if is_last_stage():
                 output, target, loss = r.output, r.target, r.loss
-                print(r.target)
+                # print(r.target)
                 # measure accuracy and record loss
                 prec1, prec5 = accuracy(output, target, topk=(1, 5))
                 losses.update(loss.item(), output.size(0))
