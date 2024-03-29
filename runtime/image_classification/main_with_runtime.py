@@ -61,7 +61,7 @@ parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size (default: 16)')
 parser.add_argument('--eval-batch-size', default=100, type=int,
                     help='eval mini-batch size (default: 100)')
-parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--lr_policy', default='step', type=str,
                     help='policy for controlling learning rate')
@@ -1024,7 +1024,7 @@ def adjust_learning_rate(optimizer, epoch, total_epochs, r, lr_policy, step, epo
 
     else:
         if lr_policy == "step":
-            lr = stage_base_lr * (0.4 ** (epoch // 10))
+            lr = stage_base_lr * (0.4 ** (epoch // 30))
         elif lr_policy == "polynomial":
             power = 2.0
             lr = stage_base_lr * \
