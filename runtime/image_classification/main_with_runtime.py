@@ -45,7 +45,7 @@ def setup_seed(seed):
 # 设置随机数种子
 setup_seed(2)
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-parser.add_argument('--data_dir', type=str, default='/home/nyt/pipedream/runtime/image_classification/data/mini_imagenet/',
+parser.add_argument('--data_dir', type=str,
                     help='path to dataset')
 parser.add_argument('--distributed_backend', type=str,
                     help='distributed backend to use (gloo|nccl)')
