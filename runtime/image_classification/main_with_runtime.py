@@ -388,6 +388,7 @@ def main():
     else:
         import torchvision
         if args.data_dir is None:
+            print('using cifar10 dataset')
             train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True,
                                                          transform=transforms.Compose([
                                                               transforms.Resize(
