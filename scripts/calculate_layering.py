@@ -5,31 +5,35 @@ import math
 import model_detail
 import torchvision.models
 import torch.nn as nn
+import raw_profile_to_profile
 # initial 动态规划目标矩阵layers stages replicate_time gpus
 # w(layers, sum_gpus, stage_num, replicate_times)
 w = numpy.zeros((200, 10, 10, 10))
 # transfer_channel = []  # perf 多机之间的带宽
 # per layer sum time compute f+b 序号从1开始
 # parameter_size = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 每层的梯度大小
-process_time = []  # 前向计算与方向计算时间之和
-DNN_per_layer_compute_time_foward = [0]  # 每层的前向计算时间
-DNN_per_layer_compute_time_backward = [0]  # 每层的反向计算时间
+process_time = []  # 前向计算与方向计算时间之和 sec
+DNN_per_layer_compute_time_foward = [0]  # 每层的前向计算时间 sec
+DNN_per_layer_compute_time_backward = [0]  # 每层的反向计算时间 sec
 
-DNN_per_layer_activation = [0]  # 每层的激活量 前向给后向传的东西 out_put_size
-DNN_per_layer_gradients = [0]  # 每层更新时候的梯度 optimizer.step()呢部分的
+DNN_per_layer_activation = [0]  # 每层的激活量 前向给后向传的东西 out_put_size MByte
+DNN_per_layer_gradients = [0]  # 每层更新时候的梯度 optimizer.step()呢部分的 MByte
 GPUS_order_list = [0]  # gpu之间带宽由高到低，里面应该是gpu的id
 GPUS_bandwidth = []  # 10Gbps to MByte/s
 
 
 PIPEDREAM_FLAG = 1
-GPU_NUM = 4
+GPU_NUM = 8
 DIR = "profile"
-DEP_IDX = 2
-LAYERS_NUM = 38
-GPUS_BANDWIDTH = 886  # Mbyte/s
+GPUS_BANDWIDTH = 886  # MByte/s
 ITER_NUM = 1000  # 测量for_bac_time时用了多少iterationa
+USING_RAW_PROFILE = True
+# USING_RAW_PROFILE=False 时起效
 MODEL = torchvision.models.vgg16()
 BATCH_SIZE = 16
+DEP_IDX = 2
+# USING_RAW_PROFILE=True 时起效
+MODEL_STR = 'vgg16'
 
 
 def read_file(filename):
@@ -40,46 +44,58 @@ def read_file(filename):
     return list
 
 
-def data_init(layers_detail):
+def data_init(using_raw_profile=True):
     file_names = os.listdir(DIR)
+    if using_raw_profile:
+        layers_detail = raw_profile_to_profile.raw_profile_to_profule(
+            MODEL_STR).layer_profile
+        for index, layer in enumerate(layers_detail):
+            # print(index, layers_detail[layer])
+            # init DNN_per_layer_compute_time
+            DNN_per_layer_compute_time_foward.append(layers_detail[layer][0])
+            DNN_per_layer_compute_time_backward.append(layers_detail[layer][1])
+            DNN_per_layer_activation.append(
+                layers_detail[layer][2]/8/1024/1024)  # bit to MByte
+            DNN_per_layer_gradients.append(
+                layers_detail[layer][3]/8/1024/1024)  # bit to MByte
 
-    # init DNN_per_layer_compute_time
-    for file_index in range(0, len(file_names)):
-        if 'bac_.txt' in file_names[file_index]:
-            list = read_file(file_names[file_index])
-            for i in list:
-                DNN_per_layer_compute_time_backward.append(float(i))
-        elif 'for_.txt' in file_names[file_index]:
-            list = read_file(file_names[file_index])
-            for i in list:
-                DNN_per_layer_compute_time_foward.append(float(i))
-        # elif 'out_put_' in file_names[file_index]:
-        #     list = read_file(file_names[file_index])
-        #     for i in list:
-        #         per_layer_shape = list(list[i])
-    # init process_time
-    for index in range(0, len(DNN_per_layer_compute_time_foward)):
-        process_time.append((
-            DNN_per_layer_compute_time_foward[index]+DNN_per_layer_compute_time_backward[index])/ITER_NUM)
+    else:
+        # init DNN_per_layer_compute_time
+        layers_detail = model_detail.model_info(
+            MODEL, batch_size=BATCH_SIZE).layers_info
+        for file_index in range(0, len(file_names)):
+            if 'bac_.txt' in file_names[file_index]:
+                list = read_file(file_names[file_index])
+                for i in list:
+                    DNN_per_layer_compute_time_backward.append(float(i))
+            elif 'for_.txt' in file_names[file_index]:
+                list = read_file(file_names[file_index])
+                for i in list:
+                    DNN_per_layer_compute_time_foward.append(float(i))
 
-    # init DNN_per_layer_activation
-    for index in range(0, len(layers_detail[DEP_IDX]['output_shape'])):
-        per_layer_shape = layers_detail[DEP_IDX]['output_shape'][index]
-        per_layer_size = math.prod(per_layer_shape) * \
-            32/8/1024/1024  # shape*float32 to MByte
-        DNN_per_layer_activation.append(per_layer_size)
+        # init DNN_per_layer_activation
+        for index in range(0, len(layers_detail[DEP_IDX]['output_shape'])):
+            per_layer_shape = layers_detail[DEP_IDX]['output_shape'][index]
+            per_layer_size = math.prod(per_layer_shape) * \
+                32/8/1024/1024  # shape*float32 to MByte
+            DNN_per_layer_activation.append(per_layer_size)
 
-    # init DNN_per_layer_gradients
-    for index in range(0, len(layers_detail[DEP_IDX]['kernel_shape'])):
-        per_layer_gradients = layers_detail[DEP_IDX]['kernel_shape'][index]
-        per_layer_gradients_size = math.prod(per_layer_gradients) * \
-            32/8/1024/1024  # shape*float32 to MByte
-        DNN_per_layer_gradients.append(per_layer_gradients_size)
+        # init DNN_per_layer_gradients
+        for index in range(0, len(layers_detail[DEP_IDX]['kernel_shape'])):
+            per_layer_gradients = layers_detail[DEP_IDX]['kernel_shape'][index]
+            per_layer_gradients_size = math.prod(per_layer_gradients) * \
+                32/8/1024/1024  # shape*float32 to MByte
+            DNN_per_layer_gradients.append(per_layer_gradients_size)
 
     # init GPUS_bandwidth GPUS_order_list
     for index in range(0, GPU_NUM):
         GPUS_bandwidth.append([GPUS_BANDWIDTH for _ in range(0, GPU_NUM)])
         GPUS_order_list.append(index)
+
+    # init process_time
+    for index in range(0, len(DNN_per_layer_compute_time_foward)):
+        process_time.append(
+            (DNN_per_layer_compute_time_foward[index]+DNN_per_layer_compute_time_backward[index])/ITER_NUM)
 
 
 def format_to_config(match):
@@ -93,7 +109,7 @@ def format_to_config(match):
         stage_to_rank_map[chr(49+index)] = list(match[key])
         for gpu in list(match[key]):
             gpu_use[gpu] = 0
-    partition.insert(0, LAYERS_NUM-layer_num)
+    partition.insert(0, len(DNN_per_layer_activation)-1-layer_num)
     stage_to_rank_map['0'] = []
     for index, gpu in enumerate(gpu_use):
         if gpu:
@@ -235,19 +251,16 @@ def compute_stage_partition_pipedream(layers, n_gpus, stages, replicate_times, F
 
 if __name__ == '__main__':
 
-    layers_detail = model_detail.model_info(
-        MODEL, batch_size=BATCH_SIZE).layers_info
-
-    data_init(layers_detail)
+    data_init(USING_RAW_PROFILE)
 
     for i in range(1, 1+GPU_NUM):
         for j in range(1, 1+GPU_NUM):
             if PIPEDREAM_FLAG:
                 time, sets, match = compute_stage_partition_pipedream(
-                    LAYERS_NUM, GPU_NUM, i, j, {}, [])
+                    len(DNN_per_layer_activation)-1, GPU_NUM, i, j, {}, [])
             else:
                 time, sets, match = compute_stage_partition(
-                    LAYERS_NUM, GPU_NUM, i, j, {}, [])
+                    len(DNN_per_layer_activation)-1, GPU_NUM, i, j, {}, [])
 
             if time != float('inf'):
 
