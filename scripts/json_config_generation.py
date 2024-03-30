@@ -1,9 +1,9 @@
 import json
-partition = [18, 4, 16]
-stage_to_rank_map = {'0': [0, 1, 2, 3, 4, 5], '1': [6], '2': [7]}
+partition = [51, 55, 35, 35]
+stage_to_rank_map = {'0': [0, 1, 2], '1': [3, 4], '2': [5], '3': [6]}
 batch = 72
 gpu_num = 8
-model = 'vgg16'
+model = 'resnet50'
 
 
 stage_num = len(stage_to_rank_map)

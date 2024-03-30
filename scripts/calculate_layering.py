@@ -23,7 +23,7 @@ GPUS_bandwidth = []  # 10Gbps to MByte/s
 
 
 PIPEDREAM_FLAG = 1
-GPU_NUM = 8
+GPU_NUM = 7
 DIR = "profile"
 GPUS_BANDWIDTH = 886  # MByte/s
 ITER_NUM = 1000  # 测量for_bac_time时用了多少iterationa
@@ -33,7 +33,7 @@ MODEL = torchvision.models.vgg16()
 BATCH_SIZE = 16
 DEP_IDX = 2
 # USING_RAW_PROFILE=True 时起效
-MODEL_STR = 'vgg16'
+MODEL_STR = 'resnet50'
 
 
 def read_file(filename):
