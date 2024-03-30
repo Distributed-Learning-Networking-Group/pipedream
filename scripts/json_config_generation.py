@@ -1,7 +1,7 @@
 import json
 partition = [38]
 stage_to_rank_map = {'0': [0, 1, 2, 3, 4, 5, 6, 7]}
-batch = 24
+batch = 72
 gpu_num = 8
 model = 'vgg16'
 
