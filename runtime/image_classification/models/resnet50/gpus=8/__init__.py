@@ -369,7 +369,7 @@ self.layer169 = torch.nn.Conv2d(512, 2048, kernel_size=(1, 1), stride=(1, 1), bi
 self.layer170 = torch.nn.BatchNorm2d(2048, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
 self.layer172 = torch.nn.ReLU()
 self.layer173 = torch.nn.AvgPool2d(kernel_size=7, stride=1, padding=0)
-self.layer176 = torch.nn.Linear(in_features=2048, out_features=1000, bias=True)'''
+self.layer176 = torch.nn.Linear(in_features=2048, out_features=10, bias=True)'''
 
 
 def get_caculations():
