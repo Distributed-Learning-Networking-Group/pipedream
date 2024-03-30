@@ -2,7 +2,7 @@ import torchvision.models
 from torchsummary import summary  # pip install torch-summary
 import torch.nn as nn
 import re
-test_model = torchvision.models.vgg16(pretrained=False)
+test_model = torchvision.models.resnet50(pretrained=False)
 
 
 class model_info():
@@ -97,4 +97,3 @@ class model_info():
 
 # if __name__ == '__main__':
 #     layers_info = model_info(test_model, batch_size=16)
-#     print(layers_info.layer_info[2]['output_shape'])

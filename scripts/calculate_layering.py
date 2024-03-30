@@ -27,9 +27,9 @@ DIR = "profile"
 DEP_IDX = 2
 LAYERS_NUM = 38
 GPUS_BANDWIDTH = 886  # Mbyte/s
-ITER_NUM = 1000  # 测量for_bac_time时用了多少iteration
+ITER_NUM = 1000  # 测量for_bac_time时用了多少iterationa
 MODEL = torchvision.models.vgg16()
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 
 
 def read_file(filename):
