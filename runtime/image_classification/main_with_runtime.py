@@ -328,8 +328,6 @@ def main():
     args.stage = r.stage
     args.num_stages = r.num_stages
     args.num_ranks = r.num_ranks
-    if not is_first_stage():
-        args.synthetic_data = True
 
     # define optimizer
     if args.no_input_pipelining:
@@ -367,11 +365,16 @@ def main():
     # Data loading code
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
-    args.synthetic_data = False
 
     if args.arch == 'inception_v3':
-        if args.synthetic_data:
-            train_dataset = SyntheticDataset((3, 299, 299), 10000)
+        if args.data_dir is None:
+            train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True,
+                                                         transform=transforms.Compose([
+                                                              transforms.Resize(
+                                                                  (224, 224)),
+                                                              transforms.ToTensor(),
+                                                              normalize,
+                                                         ]))
         else:
             traindir = os.path.join(args.data_dir, 'train')
             train_dataset = datasets.ImageFolder(
@@ -384,14 +387,14 @@ def main():
             )
     else:
         import torchvision
-        if args.synthetic_data:
-            train_dataset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True,
-                                                          transform=transforms.Compose([
+        if args.data_dir is None:
+            train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True,
+                                                         transform=transforms.Compose([
                                                               transforms.Resize(
                                                                   (224, 224)),
                                                               transforms.ToTensor(),
                                                               normalize,
-                                                          ]))
+                                                         ]))
         else:
             traindir = os.path.join(args.data_dir, 'train')
             train_dataset = datasets.ImageFolder(
@@ -402,14 +405,14 @@ def main():
                     transforms.ToTensor(),
                     normalize,
                 ]))
-    if args.synthetic_data:
-        val_dataset = torchvision.datasets.CIFAR100(root='./data', train=False,
-                                                    download=True, transform=transforms.Compose([
+    if args.data_dir is None:
+        val_dataset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                                   download=True, transform=transforms.Compose([
                                                         transforms.Resize(
                                                             (224, 224)),
                                                         transforms.ToTensor(),
                                                         normalize,
-                                                    ]))
+                                                   ]))
     else:
         valdir = os.path.join(args.data_dir, 'test')
         val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
