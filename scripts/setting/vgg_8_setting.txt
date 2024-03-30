@@ -1,8 +1,12 @@
+PIPEDREAM_FLAG = 1
 GPU_NUM = 8
 DIR = "profile"
-DEP_IDX = 2
-LAYERS_NUM = 38
-GPUS_BANDWIDTH = 886  # Mbyte/s
-ITER_NUM = 1000
+GPUS_BANDWIDTH = 886  # MByte/s
+ITER_NUM = 1000  # 测量for_bac_time时用了多少iterationa
+USING_RAW_PROFILE = True
+# USING_RAW_PROFILE=False 时起效
 MODEL = torchvision.models.vgg16()
 BATCH_SIZE = 16
+DEP_IDX = 2
+# USING_RAW_PROFILE=True 时起效
+MODEL_STR = 'vgg16'
