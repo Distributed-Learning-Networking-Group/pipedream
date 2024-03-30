@@ -22,7 +22,7 @@ GPUS_bandwidth = []  # 10Gbps to MByte/s
 
 
 PIPEDREAM_FLAG = 1
-GPU_NUM = 8
+GPU_NUM = 4
 DIR = "profile"
 DEP_IDX = 2
 LAYERS_NUM = 38

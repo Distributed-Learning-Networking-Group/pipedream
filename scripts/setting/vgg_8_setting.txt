@@ -1,0 +1,8 @@
+GPU_NUM = 8
+DIR = "profile"
+DEP_IDX = 2
+LAYERS_NUM = 38
+GPUS_BANDWIDTH = 886  # Mbyte/s
+ITER_NUM = 1000
+MODEL = torchvision.models.vgg16()
+BATCH_SIZE = 16
