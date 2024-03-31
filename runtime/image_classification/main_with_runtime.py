@@ -453,17 +453,34 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
-        # print(r.state_dict()['module0'])
-        if epoch == -1:
-            print("partition", r.stage_nums)
-            # model_vgg = module.model_vgg16(criterion, r.stage_nums.numpy().tolist(), [0, 0])
-            model_input = module.model_vgg16(
-                criterion, [10, 8, 10, 10], [0, 0])
-            training_tensor_shapes1 = {
-                "input0": input_size, "target": [args.batch_size]}
+        if epoch == 1:
+            time.sleep(30)
+            result = {}
+            gpuid=args.local_rank
+            program = NsysProgram.from_json("program.json")
+            program.args = [
+             "profile",
+             f"--gpu-metrics-device={gpuid}",
+             "--gpu-metrics-frequency=10"
+            ]
+            program.output=f"out_{gpuid}"
+            program.profile_for(5)
+            result["profile"] = program.export()
+            values = [float(v) for v in result["profile"].values()]
+            r.stage_performance[r.stage]=torch.tensor(values,dtype=torch.float32)
+            r.Send_Stage_performance(epoch)
+            r.Rec_Stage_performance(epoch)
+            if is_last_stage():
+                r.stage_nums=torch.tensor(calculate_new_placement(r.layer_forward_list,r.layer_backward_list,r.layer_communication_list,
+                                                              r.straggle_for_stage_cal,r.stage_num,r.stage_nums,10,r.stage_performance))
+            r.Send_Stage_nums(epoch)
+            r.Rec_Stage_nums(epoch)
+            print("partition",r.stage_nums)
+            model_vgg = module.model_vgg16(criterion, r.stage_nums.numpy().tolist(), [0, 0])
+            # model_vgg = module.model_vgg16(criterion, [10,8,10,10], [0, 0])
+            training_tensor_shapes1 = {"input0": input_size, "target": [args.batch_size]}
             dtypes1 = {"input0": torch.float32, "target": torch.int64}
-            # Skip last layer (loss).
-            for module_id, (stage, inputs, outputs) in enumerate(model_input[:-1]):
+            for module_id, (stage, inputs, outputs) in enumerate(model_vgg[:-1]):  # Skip last layer (loss).
                 input_tensors = []
                 for module_input in inputs:
                     if module_input in inputs_module_destinations1:
@@ -478,8 +495,7 @@ def main():
                     output_tensors = [output_tensors]
                 for output, output_tensor in zip(outputs,
                                                  list(output_tensors)):
-                    training_tensor_shapes1[output] = list(
-                        output_tensor.size())
+                    training_tensor_shapes1[output] = list(output_tensor.size())
                     dtypes1[output] = output_tensor.dtype
 
             eval_tensor_shapes = {}
@@ -488,72 +504,23 @@ def main():
                     training_tensor_shapes1[key])
                 training_tensor_shapes1[key] = tuple(
                     training_tensor_shapes1[key])
-            r.initialize1(model_input, inputs_module_destinations, configuration_maps,
+            r.initialize1(model_vgg, inputs_module_destinations, configuration_maps,
                           args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server,
                           training_tensor_shapes1, dtypes1)
             torch.distributed.barrier()
-            # save_checkpoint({
-            #     'epoch': epoch + 1,
-            #     'arch': args.arch,
-            #     'state_dict': r.state_dict(),
-            #     'best_prec1': best_prec1,
-            #     'optimizer': optimizer.state_dict(),
-            # }, args.checkpoint_dir, r.stage)
-            # for i in range(2):
-            # if r.stage==0:
-            #     # checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 1)
-            #     # print(checkpoint_file_path)
-            #     # assert os.path.isfile(checkpoint_file_path)
-            #     # print("=> loading checkpoint '{}'".format(checkpoint_file_path))
-            #     # checkpoint = torch.load(checkpoint_file_path)
-            #     # print("111111111111111")
-            #     # print("checkpoint",checkpoint['state_dict']['module0'].keys())
-            #     # print("present stage", r.state_dict()['module0'].keys())
-            #     # print("000000000000000")
-            #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 0)
-            #     assert os.path.isfile(checkpoint_file_path)
-            #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
-            #     checkpoint = torch.load(checkpoint_file_path)
-            #     for j, module in enumerate(r.modules_with_dependencies.modules()):
-            #         if j > 0:
-            #             break
-            #         module.load_state_dict(checkpoint['state_dict']["module0"], strict=False)
-            #     print("=> loaded checkpoint '{}' (epoch {})"
-            #           .format(checkpoint_file_path, checkpoint['epoch']))
-            #
-            #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 1)
-            #     assert os.path.isfile(checkpoint_file_path)
-            #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
-            #     checkpoint = torch.load(checkpoint_file_path)
-            #     for j, module in enumerate(r.modules_with_dependencies.modules()):
-            #         if j > 0:
-            #             break
-            #         module.load_state_dict(checkpoint['state_dict']["module0"], strict=False)
-            #     print("=> loaded checkpoint '{}' (epoch {})"
-            #           .format(checkpoint_file_path, checkpoint['epoch']))
-            # if r.stage == 1:
-            #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 0)
-            #     assert os.path.isfile(checkpoint_file_path)
-            #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
-            #     checkpoint = torch.load(checkpoint_file_path)
-            #     for j, module in enumerate(r.modules_with_dependencies.modules()):
-            #         if j > 0:
-            #             break
-            #         module.load_state_dict(checkpoint['state_dict']["module0"], strict=False)
-            #     print("=> loaded checkpoint '{}' (epoch {})"
-            #           .format(checkpoint_file_path, checkpoint['epoch']))
-            #
-            #     checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, 1)
-            #     assert os.path.isfile(checkpoint_file_path)
-            #     print("=> loading checkpoint '{}'".format(checkpoint_file_path))
-            #     checkpoint = torch.load(checkpoint_file_path)
-            #     for j, module in enumerate(r.modules_with_dependencies.modules()):
-            #         if j > 0:
-            #             break
-            #         module.load_state_dict(checkpoint['state_dict']["module0"], strict=False)
-            #     print("=> loaded checkpoint '{}' (epoch {})"
-            #           .format(checkpoint_file_path, checkpoint['epoch']))
-            #
+
+            for i in range(args.worker_num_sum):
+                checkpoint_file_path = "%scheckpoint.%d.pth.tar" % (args.checkpoint_dir, i)
+                assert os.path.isfile(checkpoint_file_path)
+                print("=> loading checkpoint '{}'".format(checkpoint_file_path))
+                checkpoint = torch.load(checkpoint_file_path)
+                for j, module in enumerate(r.modules_with_dependencies.modules()):
+                    if j > 0:
+                        break
+                    module.load_state_dict(checkpoint['state_dict']["module0"], strict=True)
+                print("=> loaded checkpoint '{}' (epoch {})"
+                      .format(checkpoint_file_path, checkpoint['epoch']))
+
             optimizer = sgd.SGDWithWeightStashing(r.modules(), r.master_parameters,
                                                   r.model_parameters, args.loss_scale,
                                                   num_versions=num_versions,
@@ -600,6 +567,7 @@ def main():
 def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
           master_addr, rank, local_rank, num_ranks_in_server, training_tensor_shapes1,
           dtypes1, target_tensor_names, n_num, model1):
+    mp_ranks = [0,1]
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -610,6 +578,9 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
     time_for_recieve = 0
     time_for_send = 0
     flag = False
+    flag_if_transfer = False
+    flag_if_recv = False
+    flag_if_save = False
     # switch to train mode
     n = r.num_iterations(loader_size=len(train_loader))
     # n = 1000
@@ -749,85 +720,82 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
 
         optimizer.load_new_params()
         optimizer.step()
-        # if i%50==0:
-        # #     # if r.stage==1 and i==200:
-        # #     #     r.i_for_initial=torch.tensor([210])
-        #
-        #     r.Send_initial(i)
-        #     r.Rec_initial(i)
-        #     i_for_initial=int(r.i_for_initial[0])
-        #     print("i_for_initial",i_for_initial)
-        #     r.status[r.stage]=pre_back+pre_real
-        #     # print("pre back&real",pre_back,pre_real)
-        #     r.Send_Status(i)
-        #     r.Rec_Status(i)
-        #     # if i == 100:
-        #     #     print("finish initialize cal status")
-        #     #     # list_cal=[]
-        #     #     # list_cal.append(sum(r.layer_forward_list[0:int(r.stage_nums[0])+1])+sum(r.layer_backward_list[0:int(r.stage_nums[0])+1]))
-        #     #     # list_cal.append(sum(r.layer_forward_list[int(r.stage_nums[0])+1:int(r.stage_nums[1])+1]) + sum(r.layer_backward_list[int(r.stage_nums[0])+1:int(r.stage_nums[1])+1]))
-        #     #     # r.initial_status_cal = torch.tensor(list_cal)
-        #     #     r.initial_status_cal=
-        #     if i == 100:
-        #         print("finish initialize cmp status")
-        #         r.initial_status_cmp = r.status.clone()
-        #     r.Send_Stage_nums(i)
-        #     r.Rec_Stage_nums(i)
-        #     print(r.status)
-        #     if is_last_stage():
-        #         # r.previous_status=r.status.clone()
-        #         # print("previous",r.previous_status)
-        #         if i > 100:
-        #             r.straggle_for_stage_cmp = r.status / r.initial_status_cmp
-        #             print("straggle_cmp", r.straggle_for_stage_cmp)
-        #     # if is_last_stage() and i>100 and flag==False:
-        #     #     list_index=[]
-        #     #     def if_exist_straggle(straggle_list):
-        #     #         Flag=False
-        #     #         for i in range(len(straggle_list)):
-        #     #             if straggle_list[i]>=1.4 or straggle_list[i]<=0.7:
-        #     #                 list_index.append(i)
-        #     #                 Flag=True
-        #     #         return Flag
-        #     #     if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
-        #     #         flag=True
-        #     #         print("restart")
-        #     #         for j in range(len(list_index)):
-        #     #             r.straggle_for_stage_cal[list_index[j]] = r.straggle_for_stage_cmp[list_index[j]] * r.straggle_for_stage_cal[list_index[j]]
-        #     #         print("straggle_cal", r.straggle_for_stage_cal)
-        #     #         r.i_for_initial[0]=torch.tensor([i+60])
-        #     #         r.stage_nums=torch.tensor([17,21])
-        #     #         # r.stage_nums=torch.tensor(calculate_new_placement(r.layer_forward_list,r.layer_backward_list,r.layer_communication_list,
-        #     #         #                                                   r.straggle_for_stage_cal,r.stage_num,r.stage_nums,10))
-        #     forward_list.append(pre_real)
-        #     backward_list.append(pre_back)
-        #     pre_real = 0
-        #     pre_back = 0
-        #     time_for_recieve=0
-        #     time_for_send=0
-        #     batch_end_time = time.time()
-        #     stage_complete_time = batch_end_time - batch_begin_time
-        #     batch_begin_time=time.time()
-        #     Stage_time.update(stage_complete_time)
-        #     batch_list_all.append(Stage_time.val)
 
-        # if i % 800 == 0:
-        #     def save_list_to_txt(data, filename):
-        #         numpy.savetxt(filename, data)
-        #
-        #     if r.stage == 0:
-        #         save_list_to_txt(forward_list, "data_0_for")
-        #         save_list_to_txt(backward_list, "data_0_bac")
-        #     if r.stage == 1:
-        #         save_list_to_txt(forward_list, "data_1_for")
-        #         save_list_to_txt(backward_list, "data_1_bac")
-        #     if r.stage == 2:
-        #         save_list_to_txt(forward_list, "data_2_for")
-        #         save_list_to_txt(backward_list, "data_2_bac")
-        #     if r.stage == 3:
-        #         save_list_to_txt(forward_list, "data_3_for")
-        #         save_list_to_txt(backward_list, "data_3_bac")
-        #         save_list_to_txt(batch_list_all, "data_batch")
+        if i%50==0:
+
+            r.Send_initial(i)
+            r.Rec_initial(i)
+
+            i_for_initial=int(r.i_for_initial[0])
+            print("i_for_initial",i_for_initial)
+            if i_for_initial and not flag_if_save:
+                flag_if_save = True
+                save_checkpoint({
+                    'epoch': epoch,
+                    'arch': args.arch,
+                    'state_dict': r.state_dict(),
+                    'best_prec1': best_prec1,
+                }, args.checkpoint_dir, r.stage)
+
+            if i_for_initial and not flag_if_recv and  is_last_stage():
+                flag_if_recv = True
+                for i in range(len(mp_ranks)-1):
+                    recv_filename = "checkpoint.%d.pth.tar" % (i)
+                    Rec_param(recv_filename, mp_ranks[i])
+            if i_for_initial and not flag_if_transfer and  is_last_stage():
+                flag_if_transfer = True
+                for i in range(len(mp_ranks)-1):
+                    for j in range(len(mp_ranks)):
+                        filename = "checkpoint.%d.pth.tar" % (j)
+                        Send_param(filename, mp_ranks[i])
+
+            if i_for_initial and not flag_if_transfer and not is_last_stage():
+                flag_if_transfer = True
+                filename = "checkpoint.%d.pth.tar" % (args.rank)
+                Send_param(filename, mp_ranks[-1])
+            if i_for_initial and not flag_if_recv and not is_last_stage():
+                flag_if_recv = True
+                for i in range(len(mp_ranks)):
+                    recv_filename = "checkpoint.%d.pth.tar" % (mp_ranks[i])
+                    Rec_param(recv_filename, mp_ranks[-1])
+            r.status[r.stage]=pre_back+pre_real
+            # print("pre back&real",pre_back,pre_real)
+            r.Send_Status(i)
+            r.Rec_Status(i)
+            if i == 100:
+                print("finish initialize cmp status")
+                r.initial_status_cmp = r.status.clone()
+            print(r.status)
+            if is_last_stage():
+                if i > 100:
+                    r.straggle_for_stage_cmp = r.status / r.initial_status_cmp
+                    print("straggle_cmp", r.straggle_for_stage_cmp)
+            if is_last_stage() and i>100 and flag==False:
+                list_index=[]
+                def if_exist_straggle(straggle_list):
+                    Flag=False
+                    for i in range(len(straggle_list)):
+                        if straggle_list[i]>=1.4 or straggle_list[i]<=0.7:
+                            list_index.append(i)
+                            Flag=True
+                    return Flag
+                if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
+                    flag=True
+                    print("restart")
+                    r.i_for_initial[0]=torch.tensor([i+60])
+            print(pre_real,pre_back)
+            forward_list.append(pre_real)
+            backward_list.append(pre_back)
+            pre_real = 0
+            pre_back = 0
+            time_for_recieve=0
+            time_for_send=0
+            batch_end_time = time.time()
+            stage_complete_time = batch_end_time - batch_begin_time
+            batch_begin_time=time.time()
+            Stage_time.update(stage_complete_time)
+            batch_list_all.append(Stage_time.val)
+
 
         if i == 500 and epoch == 2:
             def save_list_to_txt(data, filename):
@@ -1550,7 +1518,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
     # for i in range(1,stage_num-1):
     #     new_stage_nums.append(max_indexes[min_index[i]]-max_indexes[min_index[i-1]])
     # new_stage_nums.append(len(layer_forward_list)-max_indexes[min_index[stage_num-2]])
-    # new_stage_nums=[max_indexes[min_index[0]],max_indexes[min_index[1]]-max_indexes[min_index[0]],
+    # new_stage_nums=[max_indexes[min_index[0]],max_indexes[min_index[1]]-max_indexesmin_index[0]],
     #                 max_indexes[min_index[2]]-max_indexes[min_index[1]],len(layer_forward_list)-max_indexes[min_index[2]]]
     new_stage_nums = [max_indexes[min_index[0]], len(
         layer_forward_list)-max_indexes[min_index[0]]]
