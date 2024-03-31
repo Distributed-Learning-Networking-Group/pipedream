@@ -453,6 +453,14 @@ def main():
     # if checkpoint is loaded, start by running validation
     if args.use_dynamic:
         print("in dynamic")
+        save_checkpoint({
+            'epoch': epoch + 1,
+            'arch': args.arch,
+            'state_dict': r.state_dict(),
+            'optimizer' : optimizer.state_dict(),
+        }, args.checkpoint_dir, r.stage)
+
+
     if args.resume:
         assert args.start_epoch > 0
         validate(val_loader, r, args.start_epoch-1)
@@ -762,10 +770,9 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                     print("finish recv all param")
                 r.status[r.stage]=pre_back+pre_real
                 print("finish syc")
-                r.Send_Status(i)
-                print("finish send")
-                r.Rec_Status(i)
-                print("finish recv")
+                if i_for_initial != 0:
+                    r.Send_Status(i)
+                    r.Rec_Status(i)
                 if i == 100:
                     print("finish initialize cmp status")
                     r.initial_status_cmp = r.status.clone()
