@@ -613,8 +613,8 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
     for i in range(n - num_warmup_minibatches):
         # perform forward pass
         # if i==100-num_warmup_minibatches and (r.stage==1 or r.stage==2):
-        # if i==i_for_initial+10-num_warmup_minibatches and i_for_initial>0:
-        if i == 150-num_warmup_minibatches and epoch == -1:
+        if i==i_for_initial+10-num_warmup_minibatches and i_for_initial>0:
+        # if i == 150-num_warmup_minibatches and epoch == -1:
             print("begin")
             # EVENT.set()
             r.run_forward(stopped=True)
