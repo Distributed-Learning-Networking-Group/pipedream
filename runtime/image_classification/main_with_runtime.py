@@ -764,7 +764,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                     print("finish recv all param")
                 r.status[r.stage]=pre_back+pre_real
                 print("finish syc")
-                if i_for_initial != 0:
+                if i_for_initial == 0:
                     r.Send_Status(i)
                     r.Rec_Status(i)
                 if i == 100:
