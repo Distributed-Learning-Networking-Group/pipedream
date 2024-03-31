@@ -739,6 +739,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                     for i in range(len(mp_ranks)-1):
                         recv_filename = "checkpoint/checkpoint.%d.pth.tar" % (mp_ranks[i])
                         r.Rec_param(recv_filename, mp_ranks[i])
+                    print("finish gather in last stage")
                 #send parameters to decided stages
                 if i_for_initial and not flag_if_transfer and  is_last_stage():
                     flag_if_transfer = True
@@ -746,18 +747,21 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                         for j in range(len(mp_ranks)):
                             filename = "checkpoint/checkpoint.%d.pth.tar" % (j)
                             r.Send_param(filename, mp_ranks[i])
+                    print("finish send in last stage")
 
                 if i_for_initial and not flag_if_transfer and not is_last_stage():
                     flag_if_transfer = True
                     filename = "checkpoint/checkpoint.%d.pth.tar" % (args.rank)
                     r.Send_param(filename, mp_ranks[-1])
+                    print("finish send self param")
                 if i_for_initial and not flag_if_recv and not is_last_stage():
                     flag_if_recv = True
                     for i in range(len(mp_ranks)):
                         recv_filename = "checkpoint/checkpoint.%d.pth.tar" % (mp_ranks[i])
                         r.Rec_param(recv_filename, mp_ranks[-1])
+                    print("finish recv all param")
                 r.status[r.stage]=pre_back+pre_real
-                # print("pre back&real",pre_back,pre_real)
+                print("finish syc")
                 r.Send_Status(i)
                 r.Rec_Status(i)
                 if i == 100:
