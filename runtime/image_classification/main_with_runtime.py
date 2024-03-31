@@ -568,7 +568,7 @@ def main():
 def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
           master_addr, rank, local_rank, num_ranks_in_server, training_tensor_shapes1,
           dtypes1, target_tensor_names, n_num, model1):
-    mp_ranks = [0,1]
+    mp_ranks = [0,1,2,3,4,5,6,7]
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -778,7 +778,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                 if is_last_stage() and i>100 and flag==False:
                     list_index=[]
                     def if_exist_straggle(straggle_list):
-                        Flag=False
+                        Flag=True
                         for i in range(len(straggle_list)):
                             if straggle_list[i]>=1.4 or straggle_list[i]<=0.7:
                                 list_index.append(i)
