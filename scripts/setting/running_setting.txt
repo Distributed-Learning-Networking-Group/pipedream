@@ -1,4 +1,4 @@
 cifar10  780  max 2083 batchsize 24
-cifar10  690  max 693  batchsize 72
+cifar10  690  max 694  batchsize 72
 cifar100      max 2083
 imagenet 430  max 430  batchsize 72

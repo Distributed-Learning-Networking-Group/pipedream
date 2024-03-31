@@ -1,0 +1,99 @@
+stage_num:4 copy_time:1
+time:0.05894846419509646
+partition = [71, 50, 23, 32]
+stage_to_rank_map={'0': [0, 1, 2, 3], '1': [4, 5], '2': [6], '3': [7]}
+
+
+
+
+
+stage_num:1 copy_time:8
+time:0.07949785964359601
+partition = [176]
+stage_to_rank_map={'0': [0, 1, 2, 3, 4, 5, 6, 7]}
+
+stage_num:2 copy_time:1
+time:0.063905
+partition = [143, 33]
+stage_to_rank_map={'0': [0, 1, 2, 3, 4, 5, 6], '1': [7]}
+
+stage_num:2 copy_time:2
+time:0.06260531884655403
+partition = [121, 55]
+stage_to_rank_map={'0': [0, 1, 2, 3, 4, 5], '1': [6, 7]}
+
+stage_num:2 copy_time:3
+time:0.06353026239066029
+partition = [97, 79]
+stage_to_rank_map={'0': [0, 1, 2, 3, 4], '1': [5, 6, 7]}
+
+stage_num:2 copy_time:4
+time:0.0661028973064896
+partition = [81, 95]
+stage_to_rank_map={'0': [0, 1, 2, 3], '1': [4, 5, 6, 7]}
+
+stage_num:2 copy_time:5
+time:0.06901258843879327
+partition = [58, 118]
+stage_to_rank_map={'0': [0, 1, 2], '1': [3, 4, 5, 6, 7]}
+
+stage_num:2 copy_time:6
+time:0.07345441353564122
+partition = [37, 139]
+stage_to_rank_map={'0': [0, 1], '1': [2, 3, 4, 5, 6, 7]}
+
+stage_num:2 copy_time:7
+time:0.07609456134850022
+partition = [17, 159]
+stage_to_rank_map={'0': [0], '1': [1, 2, 3, 4, 5, 6, 7]}
+
+stage_num:3 copy_time:1
+time:0.05955821267282733
+partition = [88, 56, 32]
+stage_to_rank_map={'0': [0, 1, 2, 3, 4], '1': [5, 6], '2': [7]}
+
+stage_num:3 copy_time:2
+time:0.05993603105490793
+partition = [72, 52, 52]
+stage_to_rank_map={'0': [0, 1, 2, 3], '1': [4, 5], '2': [6, 7]}
+
+stage_num:3 copy_time:3
+time:0.06339231240888356
+partition = [49, 48, 79]
+stage_to_rank_map={'0': [0, 1, 2], '1': [3, 4], '2': [5, 6, 7]}
+
+stage_num:3 copy_time:4
+time:0.0661028973064896
+partition = [53, 28, 95]
+stage_to_rank_map={'0': [0, 1, 2], '1': [3], '2': [4, 5, 6, 7]}
+
+stage_num:3 copy_time:5
+time:0.07204110491191097
+partition = [32, 19, 125]
+stage_to_rank_map={'0': [0, 1], '1': [2], '2': [3, 4, 5, 6, 7]}
+
+stage_num:3 copy_time:6
+time:0.07633912971977654
+partition = [17, 15, 144]
+stage_to_rank_map={'0': [0], '1': [1], '2': [2, 3, 4, 5, 6, 7]}
+
+
+stage_num:4 copy_time:2
+time:0.05999156180284901
+partition = [72, 21, 31, 52]
+stage_to_rank_map={'0': [0, 1, 2, 3], '1': [4], '2': [5], '3': [6, 7]}
+
+stage_num:4 copy_time:3
+time:0.06474447624102062
+partition = [30, 44, 21, 81]
+stage_to_rank_map={'0': [0, 1], '1': [2, 3], '2': [4], '3': [5, 6, 7]}
+
+stage_num:4 copy_time:4
+time:0.07088418496159883
+partition = [32, 17, 26, 101]
+stage_to_rank_map={'0': [0, 1], '1': [2], '2': [3], '3': [4, 5, 6, 7]}
+
+stage_num:4 copy_time:5
+time:0.0762503073526559
+partition = [17, 15, 12, 132]
+stage_to_rank_map={'0': [0], '1': [1], '2': [2], '3': [3, 4, 5, 6, 7]}
