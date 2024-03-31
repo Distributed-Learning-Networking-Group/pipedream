@@ -546,17 +546,10 @@ def main():
                   dtypes1, target_tensor_names, n_num, model_input)
 
             # evaluate on validation set
-            # prec1 = validate(val_loader, r, epoch)
-            prec1 = 0
-            if r.stage != r.num_stages:
-                prec1 = 0
 
             validate(val_loader, r, epoch)
             # remember best prec@1 and save checkpoint
-            best_prec1 = max(prec1, best_prec1)
 
-            should_save_checkpoint = args.checkpoint_dir_not_nfs or r.rank_in_stage == 0
-            # should_save_checkpoint=True
             # if args.checkpoint_dir and should_save_checkpoint:
             #     save_checkpoint({
             #         'epoch': epoch + 1,
@@ -725,10 +718,8 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
         optimizer.step()
         if args.use_dynamic:
             if i%50==0:
-
                 r.Send_initial(i)
                 r.Rec_initial(i)
-
                 i_for_initial=int(r.i_for_initial[0])
                 print("i_for_initial",i_for_initial)
                 if i_for_initial and not flag_if_save:
@@ -739,12 +730,13 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                         'state_dict': r.state_dict(),
                         'best_prec1': best_prec1,
                     }, args.checkpoint_dir, r.stage)
-
+                #recv parameters to gather
                 if i_for_initial and not flag_if_recv and  is_last_stage():
                     flag_if_recv = True
                     for i in range(len(mp_ranks)-1):
-                        recv_filename = "checkpoint.%d.pth.tar" % (i)
+                        recv_filename = "checkpoint.%d.pth.tar" % (mp_ranks[i])
                         Rec_param(recv_filename, mp_ranks[i])
+                #send parameters to decided stages
                 if i_for_initial and not flag_if_transfer and  is_last_stage():
                     flag_if_transfer = True
                     for i in range(len(mp_ranks)-1):
@@ -1472,7 +1464,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
     # layer_communication_list_new=layer_communication_list
     # layer_backward_list_new=layer_backward_list
 
-    record = np.full((len(layer_forward_list_new),)*(stage_num-1), np.inf)
+    # record = np.full((len(layer_forward_list_new),)*(stage_num-1), np.inf)
     # for i in range(1,len(layer_forward_list_new)):
     #     for j in range(1,len(layer_forward_list_new)):
     #         for k in range(1,len(layer_forward_list_new)):
@@ -1514,9 +1506,9 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
     #                      present_stage_backward, layer_communication_list_new_, 99, 0, 0)
 
     from itertools import combinations
+    record = []
     items = list(range(1, len(layer_forward_list_new)))
     a = list(combinations(items, stage_num - 1))
-    flat_index = 1
     for i in a:
         layer_communication_list_new_ = []
         present_stage_forward = []
@@ -1537,12 +1529,15 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
                 present_stage_backward.append(sum(layer_backward_list_new[i[j - 1]:i[j]]))
         for j in range(len(i)):
             layer_communication_list_new_.append(layer_communication_list_new[i[j] - 1])
-        record[flat_index] = main(stage_num, present_stage_forward,present_stage_backward, layer_communication_list_new_, 99, 0, 0)
-        flat_index+=1
+        record.append(main(stage_num, present_stage_forward,present_stage_backward, layer_communication_list_new_, 99, 0, 0))
 
-    flat_index_of_min = np.argmin(record)
+    # flat_index_of_min = np.argmin(record)
     # 将扁平化索引转换为多维索引
-    min_index = np.unravel_index(flat_index_of_min, record.shape)
+    # min_index = np.unravel_index(flat_index_of_min, record.shape)
+
+    min_value_index = record.index(min(record))
+    min_index = a[min_value_index]
+
     new_stage_nums = []
     # new_stage_nums.append(max_indexes[min_index[0]])
     # for i in range(1,stage_num-1):

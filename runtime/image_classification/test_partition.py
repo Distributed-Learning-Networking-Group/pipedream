@@ -79,6 +79,7 @@ for i in a:
     # print(present_stage_backward)
     # print(layer_communication_list_new_)
 min_index=[1,2,3,4,5,6,7]
+
 new_stage_nums=[]
 for i in range(len(min_index)+1):
     if i==0:
