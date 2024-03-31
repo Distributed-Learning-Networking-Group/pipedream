@@ -459,7 +459,7 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
-        if epoch == 1:
+        if args.use_dynamic:
             time.sleep(30)
             result = {}
             gpuid=args.local_rank
