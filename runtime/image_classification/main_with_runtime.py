@@ -763,7 +763,9 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                 r.status[r.stage]=pre_back+pre_real
                 print("finish syc")
                 r.Send_Status(i)
+                print("finish send")
                 r.Rec_Status(i)
+                print("finish recv")
                 if i == 100:
                     print("finish initialize cmp status")
                     r.initial_status_cmp = r.status.clone()
