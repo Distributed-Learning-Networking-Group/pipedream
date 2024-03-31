@@ -453,12 +453,6 @@ def main():
     # if checkpoint is loaded, start by running validation
     if args.use_dynamic:
         print("in dynamic")
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'arch': args.arch,
-            'state_dict': r.state_dict(),
-            'optimizer' : optimizer.state_dict(),
-        }, args.checkpoint_dir, r.stage)
 
 
     if args.resume:
@@ -467,7 +461,13 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
-        if args.use_dynamic:
+        save_checkpoint({
+            'epoch': epoch + 1,
+            'arch': args.arch,
+            'state_dict': r.state_dict(),
+            'optimizer' : optimizer.state_dict(),
+        }, args.checkpoint_dir, r.stage)
+        if args.use_dynamic and epoch == 1 :
             time.sleep(30)
             result = {}
             gpuid=args.local_rank
