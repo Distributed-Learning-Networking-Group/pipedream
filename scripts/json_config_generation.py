@@ -1,6 +1,6 @@
 import json
-partition = [51, 55, 35, 35]
-stage_to_rank_map = {'0': [0, 1, 2], '1': [3, 4], '2': [5], '3': [6]}
+partition = [72, 54, 50]
+stage_to_rank_map = {'0': [0, 1, 2, 3], '1': [4, 5], '2': [6, 7]}
 batch = 72
 gpu_num = 8
 model = 'resnet50'
