@@ -568,7 +568,7 @@ def main():
 def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
           master_addr, rank, local_rank, num_ranks_in_server, training_tensor_shapes1,
           dtypes1, target_tensor_names, n_num, model1):
-    mp_ranks = [0,1]
+    mp_ranks = [0,1,2,3,4,5,6,7]
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -763,7 +763,6 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                         r.Rec_param(recv_filename, mp_ranks[-1])
                     print("finish recv all param")
                 r.status[r.stage]=pre_back+pre_real
-                print("finish syc")
                 if i_for_initial == 0:
                     r.Send_Status(i)
                     r.Rec_Status(i)
@@ -778,7 +777,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                 if is_last_stage() and i>100 and flag==False:
                     list_index=[]
                     def if_exist_straggle(straggle_list):
-                        Flag=False
+                        Flag=True
                         for i in range(len(straggle_list)):
                             if straggle_list[i]>=1.4 or straggle_list[i]<=0.7:
                                 list_index.append(i)
@@ -788,46 +787,12 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                         flag=True
                         print("restart")
                         r.i_for_initial[0]=torch.tensor([i+60])
-                print(pre_real,pre_back)
-                forward_list.append(pre_real)
-                backward_list.append(pre_back)
-                pre_real = 0
-                pre_back = 0
-                time_for_recieve=0
-                time_for_send=0
-                batch_end_time = time.time()
-                stage_complete_time = batch_end_time - batch_begin_time
-                batch_begin_time=time.time()
-                Stage_time.update(stage_complete_time)
-                batch_list_all.append(Stage_time.val)
+        pre_real = 0
+        pre_back = 0
+        time_for_recieve=0
+        time_for_send=0
 
 
-        if i == 500 and epoch == 2:
-            def save_list_to_txt(data, filename):
-                np.savetxt(filename, data)
-            if is_last_stage():
-                save_list_to_txt(forward_list, "data1.txt")
-                save_list_to_txt(batch_list_all, "data3_0.txt")
-                save_list_to_txt(backward_list, "data4.txt")
-                save_list_to_txt(full_batch_time, "data6.txt")
-
-                save_list_to_txt(list12, "dataa.txt")
-                save_list_to_txt(list34, "datab.txt")
-                save_list_to_txt(list56, "datac.txt")
-                save_list_to_txt(list78, "datad.txt")
-                save_list_to_txt(list910, "datae.txt")
-
-                save_list_to_txt(list_send, "data_send_1.txt")
-                save_list_to_txt(list_rec, "data_rec_1.txt")
-            if r.stage == 0:
-                save_list_to_txt(forward_list, "data_0_for_.txt")
-                save_list_to_txt(backward_list, "data_0_bac_.txt")
-            if r.stage == 1:
-                save_list_to_txt(forward_list, "data_1_for_.txt")
-                save_list_to_txt(backward_list, "data_1_bac_.txt")
-            if r.stage == 2:
-                save_list_to_txt(forward_list, "data_2_for")
-                save_list_to_txt(backward_list, "data_2_bac")
     # finish remaining backward passes
     for i in range(num_warmup_minibatches):
         if i == num_warmup_minibatches - 1:
