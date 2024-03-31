@@ -109,6 +109,7 @@ parser.add_argument('--worker_num_sum', default=1, type=int,
                     help="number of gpus")
 parser.add_argument('--present_stage_id', default=0, type=int,
                     help="stage_id")
+parser.add_argument('--use_dynamic', default=False, type=bool)
 # Recompute tensors from forward pass, instead of saving them.
 parser.add_argument('--recompute', action='store_true',
                     help='Recompute tensors in backward pass')
@@ -447,6 +448,8 @@ def main():
         num_workers=4, pin_memory=True, sampler=val_sampler, drop_last=True)
 
     # if checkpoint is loaded, start by running validation
+    if args.use_dynamic:
+        print("in dynamic")
     if args.resume:
         assert args.start_epoch > 0
         validate(val_loader, r, args.start_epoch-1)
@@ -720,81 +723,81 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
 
         optimizer.load_new_params()
         optimizer.step()
+        if args.use_dynamic:
+            if i%50==0:
 
-        if i%50==0:
+                r.Send_initial(i)
+                r.Rec_initial(i)
 
-            r.Send_initial(i)
-            r.Rec_initial(i)
+                i_for_initial=int(r.i_for_initial[0])
+                print("i_for_initial",i_for_initial)
+                if i_for_initial and not flag_if_save:
+                    flag_if_save = True
+                    save_checkpoint({
+                        'epoch': epoch,
+                        'arch': args.arch,
+                        'state_dict': r.state_dict(),
+                        'best_prec1': best_prec1,
+                    }, args.checkpoint_dir, r.stage)
 
-            i_for_initial=int(r.i_for_initial[0])
-            print("i_for_initial",i_for_initial)
-            if i_for_initial and not flag_if_save:
-                flag_if_save = True
-                save_checkpoint({
-                    'epoch': epoch,
-                    'arch': args.arch,
-                    'state_dict': r.state_dict(),
-                    'best_prec1': best_prec1,
-                }, args.checkpoint_dir, r.stage)
+                if i_for_initial and not flag_if_recv and  is_last_stage():
+                    flag_if_recv = True
+                    for i in range(len(mp_ranks)-1):
+                        recv_filename = "checkpoint.%d.pth.tar" % (i)
+                        Rec_param(recv_filename, mp_ranks[i])
+                if i_for_initial and not flag_if_transfer and  is_last_stage():
+                    flag_if_transfer = True
+                    for i in range(len(mp_ranks)-1):
+                        for j in range(len(mp_ranks)):
+                            filename = "checkpoint.%d.pth.tar" % (j)
+                            Send_param(filename, mp_ranks[i])
 
-            if i_for_initial and not flag_if_recv and  is_last_stage():
-                flag_if_recv = True
-                for i in range(len(mp_ranks)-1):
-                    recv_filename = "checkpoint.%d.pth.tar" % (i)
-                    Rec_param(recv_filename, mp_ranks[i])
-            if i_for_initial and not flag_if_transfer and  is_last_stage():
-                flag_if_transfer = True
-                for i in range(len(mp_ranks)-1):
-                    for j in range(len(mp_ranks)):
-                        filename = "checkpoint.%d.pth.tar" % (j)
-                        Send_param(filename, mp_ranks[i])
-
-            if i_for_initial and not flag_if_transfer and not is_last_stage():
-                flag_if_transfer = True
-                filename = "checkpoint.%d.pth.tar" % (args.rank)
-                Send_param(filename, mp_ranks[-1])
-            if i_for_initial and not flag_if_recv and not is_last_stage():
-                flag_if_recv = True
-                for i in range(len(mp_ranks)):
-                    recv_filename = "checkpoint.%d.pth.tar" % (mp_ranks[i])
-                    Rec_param(recv_filename, mp_ranks[-1])
-            r.status[r.stage]=pre_back+pre_real
-            # print("pre back&real",pre_back,pre_real)
-            r.Send_Status(i)
-            r.Rec_Status(i)
-            if i == 100:
-                print("finish initialize cmp status")
-                r.initial_status_cmp = r.status.clone()
-            print(r.status)
-            if is_last_stage():
-                if i > 100:
-                    r.straggle_for_stage_cmp = r.status / r.initial_status_cmp
-                    print("straggle_cmp", r.straggle_for_stage_cmp)
-            if is_last_stage() and i>100 and flag==False:
-                list_index=[]
-                def if_exist_straggle(straggle_list):
-                    Flag=False
-                    for i in range(len(straggle_list)):
-                        if straggle_list[i]>=1.4 or straggle_list[i]<=0.7:
-                            list_index.append(i)
-                            Flag=True
-                    return Flag
-                if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
-                    flag=True
-                    print("restart")
-                    r.i_for_initial[0]=torch.tensor([i+60])
-            print(pre_real,pre_back)
-            forward_list.append(pre_real)
-            backward_list.append(pre_back)
-            pre_real = 0
-            pre_back = 0
-            time_for_recieve=0
-            time_for_send=0
-            batch_end_time = time.time()
-            stage_complete_time = batch_end_time - batch_begin_time
-            batch_begin_time=time.time()
-            Stage_time.update(stage_complete_time)
-            batch_list_all.append(Stage_time.val)
+                if i_for_initial and not flag_if_transfer and not is_last_stage():
+                    flag_if_transfer = True
+                    filename = "checkpoint.%d.pth.tar" % (args.rank)
+                    Send_param(filename, mp_ranks[-1])
+                if i_for_initial and not flag_if_recv and not is_last_stage():
+                    flag_if_recv = True
+                    for i in range(len(mp_ranks)):
+                        recv_filename = "checkpoint.%d.pth.tar" % (mp_ranks[i])
+                        Rec_param(recv_filename, mp_ranks[-1])
+                r.status[r.stage]=pre_back+pre_real
+                # print("pre back&real",pre_back,pre_real)
+                r.Send_Status(i)
+                r.Rec_Status(i)
+                if i == 100:
+                    print("finish initialize cmp status")
+                    r.initial_status_cmp = r.status.clone()
+                print(r.status)
+                if is_last_stage():
+                    if i > 100:
+                        r.straggle_for_stage_cmp = r.status / r.initial_status_cmp
+                        print("straggle_cmp", r.straggle_for_stage_cmp)
+                if is_last_stage() and i>100 and flag==False:
+                    list_index=[]
+                    def if_exist_straggle(straggle_list):
+                        Flag=False
+                        for i in range(len(straggle_list)):
+                            if straggle_list[i]>=1.4 or straggle_list[i]<=0.7:
+                                list_index.append(i)
+                                Flag=True
+                        return Flag
+                    if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
+                        flag=True
+                        print("restart")
+                        r.i_for_initial[0]=torch.tensor([i+60])
+                print(pre_real,pre_back)
+                forward_list.append(pre_real)
+                backward_list.append(pre_back)
+                pre_real = 0
+                pre_back = 0
+                time_for_recieve=0
+                time_for_send=0
+                batch_end_time = time.time()
+                stage_complete_time = batch_end_time - batch_begin_time
+                batch_begin_time=time.time()
+                Stage_time.update(stage_complete_time)
+                batch_list_all.append(Stage_time.val)
 
 
         if i == 500 and epoch == 2:
