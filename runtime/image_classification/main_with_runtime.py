@@ -761,7 +761,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                     for i in range(len(mp_ranks)):
                         recv_filename = "checkpoint/checkpoint.%d.pth.tar" % (mp_ranks[i])
                         r.Rec_param(recv_filename, mp_ranks[-1])
-                    print("finish recv all param")
+                    print("finish recv all pram")
                 r.status[r.stage]=pre_back+pre_real
                 if i_for_initial == 0:
                     r.Send_Status(i)
