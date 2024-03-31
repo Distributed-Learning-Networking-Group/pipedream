@@ -93,7 +93,7 @@ parser.add_argument('--num_minibatches', default=None, type=int,
                     help="Number of minibatches to run")
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-parser.add_argument('--checkpoint_dir', default='/home/chenyuxin/yzy/pipedream-pipedream/pipedream-pipedream/runtime/image_classification/output/', type=str, metavar='PATH',
+parser.add_argument('--checkpoint_dir', default='/home/nyt/pipedream/runtime/image_classification/checkpoint/', type=str, metavar='PATH',
                     help='path to directory to save checkpoints')
 parser.add_argument('--checkpoint_dir_not_nfs', action='store_true',
                     help='checkpoint dir is not on a shared NFS server')
@@ -472,7 +472,7 @@ def main():
             r.Rec_Stage_performance(epoch)
             if is_last_stage():
                 r.stage_nums=torch.tensor(calculate_new_placement(r.layer_forward_list,r.layer_backward_list,r.layer_communication_list,
-                                                              r.straggle_for_stage_cal,r.stage_num,r.stage_nums,10,r.stage_performance))
+                                                              r.straggle_for_stage_cal,r.stage_num,r.stage_nums,10,r.stage_performance,dp_nums=[]))
             r.Send_Stage_nums(epoch)
             r.Rec_Stage_nums(epoch)
             print("partition",r.stage_nums)
@@ -1145,7 +1145,7 @@ def runtime_control(layers, stages, num_layer, present_stage_id, start_id, commu
     return min_index
 
 
-def calculate_new_placement(layer_forward_list, layer_backward_list, layer_communication_list, straggle_for_stage, stage_num, stage_nums, top_k):
+def calculate_new_placement(layer_forward_list, layer_backward_list, layer_communication_list, straggle_for_stage, stage_num, stage_nums, top_k,dp_nums):
     def main(stage_num, forward_cost_list, backward_cost_list, comm_cost_list, max_micro_batch_num, cur_micro_batch_num, timestamp):
 
         # # Total stage number
@@ -1491,25 +1491,52 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
     #                 # print(present_stage_backward)
     #             else:
     #                 continue
-    for i in range(1, len(layer_forward_list_new)):
+
+    # for i in range(1, len(layer_forward_list_new)):
+    #     layer_communication_list_new_ = []
+    #     present_stage_forward = []
+    #     present_stage_backward = []
+    #     present_stage_forward.append(
+    #         straggle_for_stage[0]*sum(layer_forward_list_new[0:i]))
+    #     present_stage_forward.append(
+    #         straggle_for_stage[1]*sum(layer_forward_list_new[i:len(layer_forward_list_new)]))
+    #
+    #     present_stage_backward.append(
+    #         straggle_for_stage[0]*sum(layer_backward_list_new[0:i]))
+    #     present_stage_backward.append(
+    #         straggle_for_stage[1]*sum(layer_backward_list_new[i:len(layer_forward_list_new)]))
+    #     layer_communication_list_new_.append(
+    #         layer_communication_list_new[i - 1])
+    #     record[i] = main(stage_num, present_stage_forward,
+    #                      present_stage_backward, layer_communication_list_new_, 99, 0, 0)
+
+    from itertools import combinations
+    items = list(range(1, len(layer_forward_list_new)))
+    a = list(combinations(items, stage_num - 1))
+    flat_index = 1
+    for i in a:
         layer_communication_list_new_ = []
         present_stage_forward = []
         present_stage_backward = []
-        present_stage_forward.append(
-            straggle_for_stage[0]*sum(layer_forward_list_new[0:i]))
-        present_stage_forward.append(
-            straggle_for_stage[1]*sum(layer_forward_list_new[i:len(layer_forward_list_new)]))
+        for j in range(len(i) + 1):
+            if j == 0:
+                present_stage_forward.append(sum(layer_forward_list_new[0:i[j]]))
+            elif j == len(i):
+                present_stage_forward.append(sum(layer_forward_list_new[i[j - 1]:len(layer_backward_list_new)]))
+            else:
+                present_stage_forward.append(sum(layer_forward_list_new[i[j - 1]:i[j]]))
+        for j in range(len(i) + 1):
+            if j == 0:
+                present_stage_backward.append(sum(layer_backward_list_new[0:i[j]]))
+            elif j == len(i):
+                present_stage_backward.append(sum(layer_backward_list_new[i[j - 1]:len(layer_backward_list_new)]))
+            else:
+                present_stage_backward.append(sum(layer_backward_list_new[i[j - 1]:i[j]]))
+        for j in range(len(i)):
+            layer_communication_list_new_.append(layer_communication_list_new[i[j] - 1])
+        record[flat_index] = main(stage_num, present_stage_forward,present_stage_backward, layer_communication_list_new_, 99, 0, 0)
+        flat_index+=1
 
-        present_stage_backward.append(
-            straggle_for_stage[0]*sum(layer_backward_list_new[0:i]))
-        present_stage_backward.append(
-            straggle_for_stage[1]*sum(layer_backward_list_new[i:len(layer_forward_list_new)]))
-        layer_communication_list_new_.append(
-            layer_communication_list_new[i - 1])
-        record[i] = main(stage_num, present_stage_forward,
-                         present_stage_backward, layer_communication_list_new_, 99, 0, 0)
-        # print(present_stage_forward)
-        # print(present_stage_backward)
     flat_index_of_min = np.argmin(record)
     # 将扁平化索引转换为多维索引
     min_index = np.unravel_index(flat_index_of_min, record.shape)
@@ -1520,8 +1547,18 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
     # new_stage_nums.append(len(layer_forward_list)-max_indexes[min_index[stage_num-2]])
     # new_stage_nums=[max_indexes[min_index[0]],max_indexes[min_index[1]]-max_indexesmin_index[0]],
     #                 max_indexes[min_index[2]]-max_indexes[min_index[1]],len(layer_forward_list)-max_indexes[min_index[2]]]
-    new_stage_nums = [max_indexes[min_index[0]], len(
-        layer_forward_list)-max_indexes[min_index[0]]]
+
+    # new_stage_nums = [max_indexes[min_index[0]], len(
+    #     layer_forward_list)-max_indexes[min_index[0]]]
+
+    for i in range(len(min_index) + 1):
+        if i == 0:
+            new_stage_nums.append(max_indexes[min_index[0]])
+        elif i == len(min_index):
+            new_stage_nums.append(len(layer_forward_list) - max_indexes[min_index[i - 1]])
+        else:
+            new_stage_nums.append(max_indexes[min_index[i]] - max_indexes[min_index[i - 1]])
+
     print("rearange", new_stage_nums)
     return new_stage_nums
 
