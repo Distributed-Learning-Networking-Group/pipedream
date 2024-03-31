@@ -461,12 +461,6 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'arch': args.arch,
-            'state_dict': r.state_dict(),
-            'optimizer' : optimizer.state_dict(),
-        }, args.checkpoint_dir, r.stage)
         if args.use_dynamic and epoch == 1 :
             time.sleep(30)
             result = {}
