@@ -574,9 +574,9 @@ def main():
                   args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server, training_tensor_shapes1,
                   dtypes1, target_tensor_names, n_num, model_input)
 
-            # evaluate on validation set
-            if not if_restart_mp and not if_restart_dp:
-                validate(val_loader, r, epoch)
+            # # evaluate on validation set
+            # if not if_restart_mp and not if_restart_dp:
+            #     validate(val_loader, r, epoch)
             # remember best prec@1 and save checkpoint
 
             # if args.checkpoint_dir and should_save_checkpoint:
