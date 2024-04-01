@@ -164,8 +164,10 @@ args = parser.parse_args()
 
 if_restart_mp = False
 if_restart_dp = False
+all_ranks = [0,1,2,3,4,5,6,7]
 mp_ranks = [0, 1, 2, 3, 4, 5, 6, 7]
-dp_ranks = [0, 1, 2, 3, 4, 5]
+dp_ranks = []
+dp_nums = []
 # 1111
 
 
@@ -327,7 +329,7 @@ def main():
         batch_size=args.batch_size,
         # 总共的batch_size大小，所有的stage该数值相同
         batch_size_for_communication=args.batch_size_for_communication,
-        stage_num=2,
+        stage_num=len(mp_ranks),
         stage_nums=partition["partition"],
         enable_recompute=args.recompute
     )
@@ -476,7 +478,7 @@ def main():
 
         if args.use_dynamic and if_restart_mp:
 
-            # time.sleep(30)
+            time.sleep(30)
             result = {}
             gpuid = args.local_rank
             program = NsysProgram.from_json("program.json")
@@ -493,9 +495,9 @@ def main():
                 values, dtype=torch.float32)
             r.Send_Stage_performance(epoch)
             r.Rec_Stage_performance(epoch)
-            # if is_last_stage():
-            #     r.stage_nums = torch.tensor(calculate_new_placement(r.layer_forward_list, r.layer_backward_list, r.layer_communication_list,
-            #                                                         r.straggle_for_stage_cal, r.stage_num, r.stage_nums, 1, r.stage_performance, dp_ranks))
+            if is_last_stage():
+                r.stage_nums = torch.tensor(calculate_new_placement(r.layer_forward_list, r.layer_backward_list, r.layer_communication_list,
+                                                                    r.straggle_for_stage_cal, r.stage_num, r.stage_nums, 2, r.stage_performance, dp_nums))
             r.Send_Stage_nums(epoch)
             r.Rec_Stage_nums(epoch)
             print("partition", r.stage_nums)
@@ -760,31 +762,31 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                 # recv parameters to gather
                 if i_for_initial and not flag_if_recv and is_last_stage():
                     flag_if_recv = True
-                    for i in range(len(mp_ranks)-1):
+                    for i in range(len(all_ranks)-1):
                         recv_filename = "checkpoint/checkpoint.%d.pth.tar" % (
-                            mp_ranks[i])
-                        r.Rec_param(recv_filename, mp_ranks[i])
+                            all_ranks[i])
+                        r.Rec_param(recv_filename, all_ranks[i])
                     print("finish gather in last stage")
                 # send parameters to decided stages
                 if i_for_initial and not flag_if_transfer and is_last_stage():
                     flag_if_transfer = True
-                    for i in range(len(mp_ranks)-1):
-                        for j in range(len(mp_ranks)):
+                    for i in range(len(all_ranks)-1):
+                        for j in range(len(all_ranks)):
                             filename = "checkpoint/checkpoint.%d.pth.tar" % (j)
-                            r.Send_param(filename, mp_ranks[i])
+                            r.Send_param(filename, all_ranks[i])
                     print("finish send in last stage")
 
                 if i_for_initial and not flag_if_transfer and not is_last_stage():
                     flag_if_transfer = True
                     filename = "checkpoint/checkpoint.%d.pth.tar" % (args.rank)
-                    r.Send_param(filename, mp_ranks[-1])
+                    r.Send_param(filename, all_ranks[-1])
                     print("finish send self param")
                 if i_for_initial and not flag_if_recv and not is_last_stage():
                     flag_if_recv = True
-                    for i in range(len(mp_ranks)):
+                    for i in range(len(all_ranks)):
                         recv_filename = "checkpoint/checkpoint.%d.pth.tar" % (
-                            mp_ranks[i])
-                        r.Rec_param(recv_filename, mp_ranks[-1])
+                            all_ranks[i])
+                        r.Rec_param(recv_filename, all_ranks[-1])
                     print("finish recv all pram")
                 r.status[r.stage] = pre_back+pre_real
                 if i_for_initial == 0:
@@ -1476,53 +1478,6 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
     import numpy as np
     import time
     time_begin = time.time()
-
-    # for test
-    # layer_forward_list_new=layer_forward_list
-    # layer_communication_list_new=layer_communication_list
-    # layer_backward_list_new=layer_backward_list
-
-    # record = np.full((len(layer_forward_list_new),)*(stage_num-1), np.inf)
-    # for i in range(1,len(layer_forward_list_new)):
-    #     for j in range(1,len(layer_forward_list_new)):
-    #         for k in range(1,len(layer_forward_list_new)):
-    #             if i<j<k:
-    #                 print(i,j,k)
-    #                 present_stage_forward=[]
-    #                 present_stage_backward=[]
-    #                 present_stage_forward.append(straggle_for_stage[0]*sum(layer_forward_list_new[0:i]))
-    #                 present_stage_forward.append(straggle_for_stage[1]*sum(layer_forward_list_new[i: j]))
-    #                 present_stage_forward.append(straggle_for_stage[2]*sum(layer_forward_list_new[j:k]))
-    #                 present_stage_forward.append(straggle_for_stage[3]*sum(layer_forward_list_new[k:len(layer_forward_list_new)]))
-    #
-    #                 present_stage_backward.append(straggle_for_stage[0]*sum(layer_backward_list_new[0:i]))
-    #                 present_stage_backward.append(straggle_for_stage[1]*sum(layer_backward_list_new[i:j]))
-    #                 present_stage_backward.append(straggle_for_stage[2]*sum(layer_backward_list_new[j:k]))
-    #                 present_stage_backward.append(straggle_for_stage[3]*sum(layer_backward_list_new[k:len(layer_forward_list_new)]))
-    #                 record[i][j][k]=main(stage_num,present_stage_forward,present_stage_backward,layer_communication_list_new,99,0,0)
-    #                 # print(present_stage_forward)
-    #                 # print(present_stage_backward)
-    #             else:
-    #                 continue
-
-    # for i in range(1, len(layer_forward_list_new)):
-    #     layer_communication_list_new_ = []
-    #     present_stage_forward = []
-    #     present_stage_backward = []
-    #     present_stage_forward.append(
-    #         straggle_for_stage[0]*sum(layer_forward_list_new[0:i]))
-    #     present_stage_forward.append(
-    #         straggle_for_stage[1]*sum(layer_forward_list_new[i:len(layer_forward_list_new)]))
-    #
-    #     present_stage_backward.append(
-    #         straggle_for_stage[0]*sum(layer_backward_list_new[0:i]))
-    #     present_stage_backward.append(
-    #         straggle_for_stage[1]*sum(layer_backward_list_new[i:len(layer_forward_list_new)]))
-    #     layer_communication_list_new_.append(
-    #         layer_communication_list_new[i - 1])
-    #     record[i] = main(stage_num, present_stage_forward,
-    #                      present_stage_backward, layer_communication_list_new_, 99, 0, 0)
-
     from itertools import combinations
     record = []
     items = list(range(1, len(layer_forward_list_new)))
