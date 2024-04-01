@@ -1541,7 +1541,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
                 pass
             else:
                 straggles[i] = torch.from_numpy(
-                    rf_regressor.predict(np.array([list(stage_performence[i]) + stage_information[i]])))
+                    rf_regressor.predict(np.array([list(stage_performence[i]) + list(stage_information[i])])))
         return straggles
 
     def get_stage_info(stage_nums):
