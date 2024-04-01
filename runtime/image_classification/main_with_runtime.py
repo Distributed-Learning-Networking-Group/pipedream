@@ -466,11 +466,11 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
-        if epoch ==1 :
+        if epoch == 1 :
             if_restart_dp = True
             if_restart_mp = True
         if args.use_dynamic and if_restart_dp:
-            r.initialize_commnication()
+            r.initialize_commnication(num_iterations=690)
 
         if args.use_dynamic and if_restart_mp:
 
