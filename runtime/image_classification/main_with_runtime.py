@@ -495,7 +495,7 @@ def main():
             r.Rec_Stage_performance(epoch)
             if is_last_stage():
                 r.stage_nums = torch.tensor(calculate_new_placement(r.layer_forward_list, r.layer_backward_list, r.layer_communication_list,
-                                                                    r.straggle_for_stage_cal, r.stage_num, r.stage_nums, 10, r.stage_performance, dp_ranks))
+                                                                    r.straggle_for_stage_cal, r.stage_num, r.stage_nums, 1, r.stage_performance, dp_ranks))
             r.Send_Stage_nums(epoch)
             r.Rec_Stage_nums(epoch)
             print("partition", r.stage_nums)
@@ -1544,8 +1544,6 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
             saved_stage_info_list, 0, np.zeros(saved_stage_info_list[0].shape), axis=0)
         saved_stage_info_list = np.array(saved_stage_info_list, dtype=int)
 
-        print(f'length of saved_stage_info_list :{len(saved_stage_info_list)}')
-
         # * return message
         query_stage_info_list = []
 
@@ -1568,7 +1566,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
 
     for i in a:
         new_stage_nums = []
-        print(i)
+        # print(i)
         for i_ in range(len(i) + 1):
             if i_ == 0:
                 new_stage_nums.append(max_indexes[i[0]])
