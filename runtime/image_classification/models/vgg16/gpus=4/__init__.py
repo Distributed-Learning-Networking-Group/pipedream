@@ -3,7 +3,6 @@
 
 from .stage0 import Stage0
 from .stage1 import Stage1
-from .vgg16 import VGG16Partitioned
 import re
 import torch
 import numpy as np
@@ -20,10 +19,6 @@ def model(criterion):
         (Stage1(), ["out0"], ["out1"]),
         (criterion, ["out1"], ["loss"])
     ]
-
-
-def full_model():
-    return VGG16Partitioned()
 
 
 class Vgg16():
@@ -273,7 +268,7 @@ self.layer37 = torch.nn.Dropout(p=0.5)
 self.layer38 = torch.nn.Linear(in_features=4096, out_features=4096, bias=True)
 self.layer39 = torch.nn.ReLU()
 self.layer40 = torch.nn.Dropout(p=0.5)
-self.layer41 = torch.nn.Linear(in_features=4096, out_features=100, bias=True)'''
+self.layer41 = torch.nn.Linear(in_features=4096, out_features=10, bias=True)'''
 
 
 def get_caculations():
