@@ -545,7 +545,7 @@ def main():
                     if j > 0:
                         break
                     module.load_state_dict(
-                        checkpoint['state_dict']["module0"], strict=True)
+                        checkpoint['state_dict']["module0"], strict=False)
                 print("=> loaded checkpoint '{}' (epoch {})"
                       .format(checkpoint_file_path, checkpoint['epoch']))
 
