@@ -619,7 +619,7 @@ class StageRuntime:
         #         self.ranks_in_next_stage)
         if self.comm_handler is not None:
             self.comm_handler.initialize(
-                torch.ones(self.worker_num_sum, dtype=torch.float),
+                self.profiles,
                 self.receive_ranks,
                 self.send_ranks,
                 stage_to_rank_map[self.stage],

@@ -470,7 +470,9 @@ def main():
             if_restart_dp = True
             if_restart_mp = True
         if args.use_dynamic and if_restart_dp:
-            r.initialize_commnication(num_iterations=690)
+            r.initialize1(model_vgg, inputs_module_destinations, configuration_maps,
+                          args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server,
+                          training_tensor_shapes1, dtypes1)
 
         if args.use_dynamic and if_restart_mp:
 
@@ -800,7 +802,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                             if 0.7<r.profiles[i]<1.4:
                                 r.profiles[i] = 1
                         print("straggle_cmp", r.straggle_for_stage_cmp)
-                if is_last_stage() and i > 100 and flag == False:
+                if is_last_stage() and i > 100 and not flag:
                     print("in dynamic last stage")
                     list_index = []
 
