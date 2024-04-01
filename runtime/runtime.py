@@ -1226,7 +1226,7 @@ class StageRuntime:
     def Send_profiles(self, tag):
         if self.rank == self.worker_num_sum - 1:
             for i in range(self.worker_num_sum - 1):
-                dist.send(tensor=self.straggle_for_stage_cmp, dst=i, tag=tag)
+                dist.send(tensor=self.profiles, dst=i, tag=tag)
         else:
             return
 

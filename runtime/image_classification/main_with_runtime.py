@@ -466,6 +466,9 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
+        if epoch ==1 :
+            if_restart_dp = True
+            if_restart_mp = True
         if args.use_dynamic and if_restart_dp:
             r.initialize_commnication()
 
@@ -633,10 +636,6 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
         # perform forward pass
         # if i==100-num_warmup_minibatches and (r.stage==1 or r.stage==2):
         if i == i_for_initial+10-num_warmup_minibatches and i_for_initial > 0:
-            global if_restart_dp
-            global if_restart_mp
-            if_restart_mp = r.restart_type[0]
-            if_restart_dp = r.restart_type[1]
             print("begin")
             # EVENT.set()
             r.run_forward(stopped=True)
@@ -796,6 +795,10 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                 if is_last_stage():
                     if i > 100:
                         r.straggle_for_stage_cmp = r.status / r.initial_status_cmp
+                        r.profiles = r.straggle_for_stage_cmp
+                        for i in range(len(r.profiles)):
+                            if 0.7<r.profiles[i]<1.4:
+                                r.profiles[i] = 1
                         print("straggle_cmp", r.straggle_for_stage_cmp)
                 if is_last_stage() and i > 100 and flag == False:
                     list_index = []
@@ -1568,6 +1571,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
             else:
                 new_stage_nums.append(
                     max_indexes[i[i_]] - max_indexes[i[i_ - 1]])
+        print("in repartition alg",new_stage_nums)
         stage_information = get_stage_info(new_stage_nums)
         straggle_for_stage_ = calculate_straggle(
             stage_performance, stage_information)
