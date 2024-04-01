@@ -801,6 +801,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                                 r.profiles[i] = 1
                         print("straggle_cmp", r.straggle_for_stage_cmp)
                 if is_last_stage() and i > 100 and flag == False:
+                    print("in dynamic last stage")
                     list_index = []
 
                     def if_exist_straggle(straggle_list):
@@ -810,6 +811,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                                 list_index.append(i)
                                 Flag = True
                         return Flag
+                    print("list",list_index)
                     if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
                         for j in range(len(list_index)):
                             if list_index[j] in dp_ranks:
