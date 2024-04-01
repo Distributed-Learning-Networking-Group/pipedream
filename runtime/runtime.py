@@ -108,7 +108,7 @@ class StageRuntime:
             self.layer_communication_list = [1000*float(x) for x in data]
 
         self.stage_num=stage_num
-        self.stage_nums=torch.tensor(worker_num_sum)   #
+        self.stage_nums=torch.tensor(stage_nums)   #
         self.straggle_for_stage_cmp=torch.ones(self.worker_num_sum,dtype=torch.float)  #
         self.straggle_for_stage_cal = torch.ones(self.worker_num_sum, dtype=torch.float)
         self.initial_status_cmp=torch.zeros(self.worker_num_sum, dtype=torch.float)    #
