@@ -162,9 +162,12 @@ class SyntheticDataset(torch.utils.data.dataset.Dataset):
 
 args = parser.parse_args()
 
-
+if_restart_mp = False
+if_restart_dp = False
+mp_ranks = [0,1,2,3,4,5,6,7]
+dp_ranks = []
 def main():
-    global args, best_prec1
+    global args, best_prec1, if_restart_dp, if_restart_mp
     args = parser.parse_args()
 
     torch.cuda.set_device(args.local_rank)
@@ -461,7 +464,12 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
-        if args.use_dynamic and epoch == 1 :
+        if args.use_dynamic and if_restart_dp:
+            r.initialize_commnication()
+
+
+        if args.use_dynamic and if_restart_mp :
+
             time.sleep(30)
             result = {}
             gpuid=args.local_rank
@@ -480,12 +488,11 @@ def main():
             r.Rec_Stage_performance(epoch)
             if is_last_stage():
                 r.stage_nums=torch.tensor(calculate_new_placement(r.layer_forward_list,r.layer_backward_list,r.layer_communication_list,
-                                                              r.straggle_for_stage_cal,r.stage_num,r.stage_nums,10,r.stage_performance,dp_nums=[]))
+                                                              r.straggle_for_stage_cal,r.stage_num,r.stage_nums,10,r.stage_performance,dp_ranks))
             r.Send_Stage_nums(epoch)
             r.Rec_Stage_nums(epoch)
             print("partition",r.stage_nums)
             model_vgg = module.model_vgg16(criterion, r.stage_nums.numpy().tolist(), [0, 0])
-            # model_vgg = module.model_vgg16(criterion, [10,8,10,10], [0, 0])
             training_tensor_shapes1 = {"input0": input_size, "target": [args.batch_size]}
             dtypes1 = {"input0": torch.float32, "target": torch.int64}
             for module_id, (stage, inputs, outputs) in enumerate(model_vgg[:-1]):  # Skip last layer (loss).
@@ -546,13 +553,17 @@ def main():
             validate(val_loader, r, epoch)
         else:
             n_num = epoch*10
+            if_restart_dp = False
+            r.restart_type[1] = False
+            if_restart_mp = False
+            r.restart_type[0] = False
             train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
                   args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server, training_tensor_shapes1,
                   dtypes1, target_tensor_names, n_num, model_input)
 
             # evaluate on validation set
-
-            validate(val_loader, r, epoch)
+            if not if_restart_mp and not if_restart_dp:
+                validate(val_loader, r, epoch)
             # remember best prec@1 and save checkpoint
 
             # if args.checkpoint_dir and should_save_checkpoint:
@@ -568,7 +579,6 @@ def main():
 def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
           master_addr, rank, local_rank, num_ranks_in_server, training_tensor_shapes1,
           dtypes1, target_tensor_names, n_num, model1):
-    mp_ranks = [0,1,2,3,4,5,6,7]
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -615,7 +625,10 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
         # perform forward pass
         # if i==100-num_warmup_minibatches and (r.stage==1 or r.stage==2):
         if i==i_for_initial+10-num_warmup_minibatches and i_for_initial>0:
-        # if i == 150-num_warmup_minibatches and epoch == -1:
+            global if_restart_dp
+            global if_restart_mp
+            if_restart_mp = r.restart_type[0]
+            if_restart_dp = r.restart_type[1]
             print("begin")
             # EVENT.set()
             r.run_forward(stopped=True)
@@ -644,14 +657,6 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                     r.run_backward()
                     optimizer.load_new_params()
                     optimizer.step()
-            # save_checkpoint({
-            #     'epoch': epoch + 1,
-            #     'arch': args.arch,
-            #     'state_dict': r.state_dict(),
-            #     'best_prec1': best_prec1,
-            #     'optimizer': optimizer.state_dict(),
-            # }, args.checkpoint_dir, r.stage)
-            # torch.distributed.barrier()
             r.wait()
             EVENT.clear()
             EVENT1.clear()
@@ -725,8 +730,16 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
             if i%50==0:
                 r.Send_initial(i)
                 r.Rec_initial(i)
+                r.Send_restart_type(i)
+                r.Rec_restart_type(i)
+                r.Send_profiles(i)
+                r.Rec_profiles(i)
                 i_for_initial=int(r.i_for_initial[0])
+                if_restart_mp = bool(r.restart_mp[0])
+                if_restart_dp = bool(r.restart_mp[1])
                 print("i_for_initial",i_for_initial)
+                print("restart_dtype",if_restart_mp,if_restart_dp)
+                print("profiles",r.profiles)
                 if i_for_initial and not flag_if_save:
                     flag_if_save = True
                     save_checkpoint({
@@ -784,9 +797,15 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                                 Flag=True
                         return Flag
                     if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
+                        for i in range(len(list_index)):
+                            if list_index[i] in dp_ranks:
+                                if_restart_dp = True
+                            if list_index[i] in mp_ranks:
+                                if_restart_mp = True
                         flag=True
-                        print("restart")
+                        r.restart_type = torch.tensor([if_restart_mp,if_restart_dp])
                         r.i_for_initial[0]=torch.tensor([i+60])
+                        print("restart")
         pre_real = 0
         pre_back = 0
         time_for_recieve=0
@@ -1115,7 +1134,7 @@ def runtime_control(layers, stages, num_layer, present_stage_id, start_id, commu
     return min_index
 
 
-def calculate_new_placement(layer_forward_list, layer_backward_list, layer_communication_list, straggle_for_stage, stage_num, stage_nums, top_k,dp_nums):
+def calculate_new_placement(layer_forward_list, layer_backward_list, layer_communication_list, straggle_for_stage, stage_num, stage_nums, top_k,stage_performance,dp_nums):
     def main(stage_num, forward_cost_list, backward_cost_list, comm_cost_list, max_micro_batch_num, cur_micro_batch_num, timestamp):
 
         # # Total stage number
@@ -1484,24 +1503,75 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
     record = []
     items = list(range(1, len(layer_forward_list_new)))
     a = list(combinations(items, stage_num - 1))
+    import joblib
+    import numpy as np
+    rf_regressor = joblib.load('rf.pkl')
+
+    def calculate_straggle(stage_performence, stage_information):
+        straggles = torch.ones(len(stage_performence), dtype=float)
+        for i in range(len(stage_performence)):
+            if stage_performence[i][0] == 0:
+                pass
+            else:
+                straggles[i] = torch.from_numpy(
+                    rf_regressor.predict(np.array([list(stage_performence[i]) + stage_information[i]])))
+        return straggles
+    def get_stage_info(stage_nums):
+        with open('data.npy', 'rb') as f:
+            saved_stage_info_list = np.load(f)
+        # insert all zeros vector at the beginning to enable cumsum calculation
+        saved_stage_info_list = np.insert(
+            saved_stage_info_list, 0, np.zeros(saved_stage_info_list[0].shape), axis=0)
+        saved_stage_info_list = np.array(saved_stage_info_list, dtype=int)
+
+        # * return message
+        query_stage_info_list = []
+
+        cumsum_stage_nums = np.cumsum(stage_nums)
+        for idx in range(len(cumsum_stage_nums) - 1):
+            if idx == 0:
+                query_stage_info_list.append(
+                    saved_stage_info_list[cumsum_stage_nums[idx]][0]
+                )
+            else:
+                query_stage_info_list.append(
+                    saved_stage_info_list[cumsum_stage_nums[idx]][0] -
+                    saved_stage_info_list[cumsum_stage_nums[idx - 1]][0]
+                )
+        query_stage_info_list.append(
+            saved_stage_info_list[-1][0] -
+            saved_stage_info_list[cumsum_stage_nums[-2]][0]
+        )
+        return query_stage_info_list
+
     for i in a:
+        new_stage_nums = []
+        for i_ in range(len(i) + 1):
+            if i_ == 0:
+                new_stage_nums.append(max_indexes[i[0]])
+            elif i_ == len(i):
+                new_stage_nums.append(len(layer_forward_list) - max_indexes[i[i_ - 1]])
+            else:
+                new_stage_nums.append(max_indexes[i[i_]] - max_indexes[i[i_ - 1]])
+        stage_information = get_stage_info(new_stage_nums)
+        straggle_for_stage_ = calculate_straggle(stage_performance, stage_information)
         layer_communication_list_new_ = []
         present_stage_forward = []
         present_stage_backward = []
         for j in range(len(i) + 1):
             if j == 0:
-                present_stage_forward.append(sum(layer_forward_list_new[0:i[j]]))
+                present_stage_forward.append(straggle_for_stage_[j]*sum(layer_forward_list_new[0:i[j]]))
             elif j == len(i):
-                present_stage_forward.append(sum(layer_forward_list_new[i[j - 1]:len(layer_backward_list_new)]))
+                present_stage_forward.append(straggle_for_stage_[j]*sum(layer_forward_list_new[i[j - 1]:len(layer_backward_list_new)]))
             else:
-                present_stage_forward.append(sum(layer_forward_list_new[i[j - 1]:i[j]]))
+                present_stage_forward.append(straggle_for_stage_[j]*sum(layer_forward_list_new[i[j - 1]:i[j]]))
         for j in range(len(i) + 1):
             if j == 0:
-                present_stage_backward.append(sum(layer_backward_list_new[0:i[j]]))
+                present_stage_backward.append(straggle_for_stage_[j]*sum(layer_backward_list_new[0:i[j]]))
             elif j == len(i):
-                present_stage_backward.append(sum(layer_backward_list_new[i[j - 1]:len(layer_backward_list_new)]))
+                present_stage_backward.append(straggle_for_stage_[j]*sum(layer_backward_list_new[i[j - 1]:len(layer_backward_list_new)]))
             else:
-                present_stage_backward.append(sum(layer_backward_list_new[i[j - 1]:i[j]]))
+                present_stage_backward.append(straggle_for_stage_[j]*sum(layer_backward_list_new[i[j - 1]:i[j]]))
         for j in range(len(i)):
             layer_communication_list_new_.append(layer_communication_list_new[i[j] - 1])
         record.append(main(stage_num, present_stage_forward,present_stage_backward, layer_communication_list_new_, 99, 0, 0))
@@ -1533,6 +1603,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
             new_stage_nums.append(max_indexes[min_index[i]] - max_indexes[min_index[i - 1]])
 
     print("rearange", new_stage_nums)
+    new_stage_nums = dp_nums+new_stage_nums
     return new_stage_nums
 
 

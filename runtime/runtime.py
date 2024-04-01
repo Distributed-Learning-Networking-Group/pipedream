@@ -84,6 +84,8 @@ class StageRuntime:
 
         self.status=torch.zeros(self.worker_num_sum, dtype=torch.float)
 
+        self.stage_performance = torch.zeros((worker_num_sum, 26), dtype=torch.float32)
+        self.restart_type = torch.zeros(2)
         self.time12=0
         self.time34=0
         # Enable recomputation to prevent the need to save activations
@@ -111,7 +113,8 @@ class StageRuntime:
         self.straggle_for_stage_cal = torch.ones(self.worker_num_sum, dtype=torch.float)
         self.initial_status_cmp=torch.zeros(self.worker_num_sum, dtype=torch.float)    #
         self.initial_status_cal = torch.ones(self.worker_num_sum, dtype=torch.float)  #
-
+        self.configuration_maps = []
+        self.profiles = torch.ones(self.worker_num_sum, dtype=torch.float)
         # Disable recomputation for the last stage.
         if rank == num_ranks_in_server - 1:
             self.enable_recompute = False
@@ -158,6 +161,7 @@ class StageRuntime:
 
         module_to_stage_map = configuration_maps['module_to_stage_map']
         stage_to_rank_map = configuration_maps['stage_to_rank_map']
+        self.configuration_maps = stage_to_rank_map
         stage_to_depth_map = configuration_maps['stage_to_depth_map']
 
         if module_to_stage_map is None:
@@ -631,7 +635,24 @@ class StageRuntime:
                 )
         # print(self.modules_with_dependencies.modules()[0].state_dict())
 
-
+    def initialize_commnication(self,num_iterations):
+        stage_to_rank_map = self.configuration_maps
+        self.comm_handler.initialize(
+            self.profiles,
+            self.receive_ranks,
+            self.send_ranks,
+            stage_to_rank_map[self.stage],
+            self.tensor_tags,
+            self.target_tensor_names,
+            self.training_tensor_dtypes,
+            self.rank_in_stage,
+            self.num_ranks_in_stage,
+            self.ranks_in_previous_stage,
+            self.ranks_in_next_stage,
+            self.batch_size_for_communication
+        )
+        self.comm_handler.set_tensor_shapes(self.tensor_shapes)
+        self.comm_handler.start_helper_threads(num_iterations, forward_only=False)
     @property
     def target(self):
         return self.tensors[-1]["target"]
@@ -1177,3 +1198,40 @@ class StageRuntime:
         # Writing out the received file content
         with open(recv_filename, 'wb') as f:
             f.write(file_tensor.numpy().tobytes())
+
+    def Send_Stage_performance(self,tag):
+        if self.stage!=self.worker_num_sum-1:
+            dist.send(tensor=self.stage_performance,dst=self.worker_num_sum-1,tag=tag)
+        else:
+            return
+    def Rec_Stage_performance(self,tag):
+        if self.stage==self.worker_num_sum-1:
+            for i in range(self.worker_num_sum-1):
+                for_rec = torch.zeros(self.stage_performance.shape, dtype=torch.float32)
+                dist.recv(tensor=for_rec, src=i, tag=tag)
+                self.stage_performance[i] = for_rec[i]
+
+    def Send_restart_type(self,tag):
+        if self.rank == self.worker_num_sum-1:
+            for i in range(self.worker_num_sum-1):
+                dist.send(tensor=self.restart_type, dst=i, tag=tag)
+        else:
+            return
+    def Rec_restart_type(self,tag):
+        if self.rank != self.worker_num_sum-1:
+            dist.recv(tensor=self.restart_type, src=self.worker_num_sum-1, tag=tag)
+        else:
+            return
+
+    def Send_profiles(self, tag):
+        if self.rank == self.worker_num_sum - 1:
+            for i in range(self.worker_num_sum - 1):
+                dist.send(tensor=self.straggle_for_stage_cmp, dst=i, tag=tag)
+        else:
+            return
+
+    def Rec_profiles(self, tag):
+        if self.rank != self.worker_num_sum - 1:
+            dist.recv(tensor=self.profiles, src=self.worker_num_sum - 1, tag=tag)
+        else:
+            return
