@@ -164,7 +164,7 @@ args = parser.parse_args()
 
 if_restart_mp = False
 if_restart_dp = False
-all_ranks = [0,1,2,3,4,5,6,7]
+all_ranks = [0, 1, 2, 3, 4, 5, 6, 7]
 mp_ranks = [0, 1, 2, 3, 4, 5, 6, 7]
 dp_ranks = []
 dp_nums = []
@@ -468,9 +468,6 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
-        if epoch == 1:
-            if_restart_dp = True
-            if_restart_mp = True
         if args.use_dynamic and if_restart_dp:
             r.initialize1(model_input, inputs_module_destinations, configuration_maps,
                           args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server,
@@ -809,7 +806,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                     list_index = []
 
                     def if_exist_straggle(straggle_list):
-                        Flag = True
+                        Flag = False
                         for i in range(len(straggle_list)):
                             if straggle_list[i] >= 1.4 or straggle_list[i] <= 0.7:
                                 list_index.append(i)
