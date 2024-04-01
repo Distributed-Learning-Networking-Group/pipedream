@@ -164,7 +164,7 @@ args = parser.parse_args()
 
 if_restart_mp = False
 if_restart_dp = False
-mp_ranks = [6, 7]
+mp_ranks = [0, 1, 2, 3, 4, 5, 6, 7]
 dp_ranks = [0, 1, 2, 3, 4, 5]
 # 1111
 
@@ -327,7 +327,7 @@ def main():
         batch_size=args.batch_size,
         # 总共的batch_size大小，所有的stage该数值相同
         batch_size_for_communication=args.batch_size_for_communication,
-        stage_num=len(mp_ranks),
+        stage_num=2,
         stage_nums=partition["partition"],
         enable_recompute=args.recompute
     )
@@ -493,9 +493,9 @@ def main():
                 values, dtype=torch.float32)
             r.Send_Stage_performance(epoch)
             r.Rec_Stage_performance(epoch)
-            if is_last_stage():
-                r.stage_nums = torch.tensor(calculate_new_placement(r.layer_forward_list, r.layer_backward_list, r.layer_communication_list,
-                                                                    r.straggle_for_stage_cal, r.stage_num, r.stage_nums, 1, r.stage_performance, dp_ranks))
+            # if is_last_stage():
+            #     r.stage_nums = torch.tensor(calculate_new_placement(r.layer_forward_list, r.layer_backward_list, r.layer_communication_list,
+            #                                                         r.straggle_for_stage_cal, r.stage_num, r.stage_nums, 1, r.stage_performance, dp_ranks))
             r.Send_Stage_nums(epoch)
             r.Rec_Stage_nums(epoch)
             print("partition", r.stage_nums)
