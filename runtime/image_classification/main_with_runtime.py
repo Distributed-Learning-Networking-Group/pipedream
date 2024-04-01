@@ -466,7 +466,7 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
-        if epoch == 1 :
+        if epoch == 1:
             if_restart_dp = True
             if_restart_mp = True
         if args.use_dynamic and if_restart_dp:
@@ -799,32 +799,36 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                         r.straggle_for_stage_cmp = r.status / r.initial_status_cmp
                         r.profiles = r.straggle_for_stage_cmp
                         for i in range(len(r.profiles)):
-                            if 0.7<r.profiles[i]<1.4:
+                            if 0.7 < r.profiles[i] < 1.4:
                                 r.profiles[i] = 1
                         print("straggle_cmp", r.straggle_for_stage_cmp)
-                if is_last_stage() and i > 100 and not flag:
-                    print("in dynamic last stage")
-                    list_index = []
+                if is_last_stage():
+                    print('is_last_stage yes')
+                    if i > 100:
+                        print('i>100 yes')
+                        if not flag:
+                            print("in dynamic last stage")
+                            list_index = []
 
-                    def if_exist_straggle(straggle_list):
-                        Flag = True
-                        for i in range(len(straggle_list)):
-                            if straggle_list[i] >= 1.4 or straggle_list[i] <= 0.7:
-                                list_index.append(i)
+                            def if_exist_straggle(straggle_list):
                                 Flag = True
-                        return Flag
-                    print("list",list_index)
-                    if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
-                        for j in range(len(list_index)):
-                            if list_index[j] in dp_ranks:
-                                if_restart_dp = True
-                            if list_index[j] in mp_ranks:
-                                if_restart_mp = True
-                        flag = True
-                        r.restart_type = torch.tensor(
-                            [if_restart_mp, if_restart_dp])
-                        r.i_for_initial[0] = torch.tensor([i+60])
-                        print("restart")
+                                for i in range(len(straggle_list)):
+                                    if straggle_list[i] >= 1.4 or straggle_list[i] <= 0.7:
+                                        list_index.append(i)
+                                        Flag = True
+                                return Flag
+                            print("list", list_index)
+                            if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
+                                for j in range(len(list_index)):
+                                    if list_index[j] in dp_ranks:
+                                        if_restart_dp = True
+                                    if list_index[j] in mp_ranks:
+                                        if_restart_mp = True
+                                flag = True
+                                r.restart_type = torch.tensor(
+                                    [if_restart_mp, if_restart_dp])
+                                r.i_for_initial[0] = torch.tensor([i+60])
+                                print("restart")
         pre_real = 0
         pre_back = 0
         time_for_recieve = 0
@@ -1575,7 +1579,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
             else:
                 new_stage_nums.append(
                     max_indexes[i[i_]] - max_indexes[i[i_ - 1]])
-        print("in repartition alg",new_stage_nums)
+        print("in repartition alg", new_stage_nums)
         stage_information = get_stage_info(new_stage_nums)
         straggle_for_stage_ = calculate_straggle(
             stage_performance, stage_information)
