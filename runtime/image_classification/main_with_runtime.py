@@ -808,10 +808,10 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                                 Flag = True
                         return Flag
                     if if_exist_straggle(r.straggle_for_stage_cmp.numpy().tolist()):
-                        for i in range(len(list_index)):
-                            if list_index[i] in dp_ranks:
+                        for j in range(len(list_index)):
+                            if list_index[j] in dp_ranks:
                                 if_restart_dp = True
-                            if list_index[i] in mp_ranks:
+                            if list_index[j] in mp_ranks:
                                 if_restart_mp = True
                         flag = True
                         r.restart_type = torch.tensor(
