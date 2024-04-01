@@ -593,6 +593,7 @@ def main():
 def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
           master_addr, rank, local_rank, num_ranks_in_server, training_tensor_shapes1,
           dtypes1, target_tensor_names, n_num, model1):
+    global args, best_prec1, if_restart_dp, if_restart_mp
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
