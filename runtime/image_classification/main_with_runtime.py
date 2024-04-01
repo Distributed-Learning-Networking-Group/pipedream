@@ -327,7 +327,7 @@ def main():
         batch_size=args.batch_size,
         # 总共的batch_size大小，所有的stage该数值相同
         batch_size_for_communication=args.batch_size_for_communication,
-        stage_num=8,
+        stage_num=len(mp_ranks),
         stage_nums=partition["partition"],
         enable_recompute=args.recompute
     )
