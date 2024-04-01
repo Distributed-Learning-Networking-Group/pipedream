@@ -468,11 +468,13 @@ def main():
     # args.epochs=1
 
     for epoch in range(args.start_epoch, args.epochs):
+
+        print(f'if_restart_mp_befor_initialize1:{if_restart_mp}')
         if args.use_dynamic and if_restart_dp:
             r.initialize1(model_input, inputs_module_destinations, configuration_maps,
                           args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server,
                           training_tensor_shapes1, dtypes1)
-
+        print(f'if_restart_mp_after_initialize1:{if_restart_mp}')
         if args.use_dynamic and if_restart_mp:
 
             time.sleep(30)
@@ -798,7 +800,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                         r.straggle_for_stage_cmp = r.status / r.initial_status_cmp
                         r.profiles = r.straggle_for_stage_cmp
                         for profile_index in range(len(r.profiles)):
-                            if 0.7 < r.profiles[profile_index] < 1.4:
+                            if 0.5 < r.profiles[profile_index] < 2:
                                 r.profiles[profile_index] = 1
                         print("straggle_cmp", r.straggle_for_stage_cmp)
                 if is_last_stage() and i > 100 and not flag:
@@ -808,7 +810,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                     def if_exist_straggle(straggle_list):
                         Flag = False
                         for i in range(len(straggle_list)):
-                            if straggle_list[i] >= 1.4 or straggle_list[i] <= 0.7:
+                            if straggle_list[i] >= 2 or straggle_list[i] <= 0.5:
                                 list_index.append(i)
                                 Flag = True
                         return Flag
