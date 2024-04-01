@@ -164,8 +164,8 @@ args = parser.parse_args()
 
 if_restart_mp = False
 if_restart_dp = False
-mp_ranks = [0, 1, 2, 3, 4, 5, 6, 7]
-dp_ranks = []
+mp_ranks = [4, 5, 6, 7]
+dp_ranks = [0, 1, 2, 3]
 # 1111
 
 
