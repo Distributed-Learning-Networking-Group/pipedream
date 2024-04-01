@@ -304,9 +304,9 @@ def main():
             int(k): v for (k, v) in configuration_maps['stage_to_rank_map'].items()}
         configuration_maps['stage_to_depth_map'] = json_config_file.get(
             "stage_to_depth_map", None)
-    print("shape")
+    # print("shape")
     # print(training_tensor_shapes)
-    print(training_tensor_shapes1)
+    # print(training_tensor_shapes1)
     # if args.present_stage_id==1:
     #     args.loss_scale=float(1/3)
     r = runtime.StageRuntime(
@@ -469,12 +469,12 @@ def main():
 
     for epoch in range(args.start_epoch, args.epochs):
 
-        print(f'if_restart_mp_befor_initialize1:{if_restart_mp}')
+        # print(f'if_restart_mp_befor_initialize1:{if_restart_mp}')
         if args.use_dynamic and if_restart_dp:
             r.initialize1(model_input, inputs_module_destinations, configuration_maps,
                           args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server,
                           training_tensor_shapes1, dtypes1)
-        print(f'if_restart_mp_after_initialize1:{if_restart_mp}')
+        # print(f'if_restart_mp_after_initialize1:{if_restart_mp}')
         if args.use_dynamic and if_restart_mp:
 
             time.sleep(30)
@@ -499,7 +499,7 @@ def main():
                                                                     r.straggle_for_stage_cal, r.stage_num, r.stage_nums, 2, r.stage_performance, dp_nums))
             r.Send_Stage_nums(epoch)
             r.Rec_Stage_nums(epoch)
-            print("partition", r.stage_nums)
+            # print("partition", r.stage_nums)
             model_vgg = module.model_vgg16(
                 criterion, r.stage_nums.numpy().tolist(), partition["recompute_ratio"])
             training_tensor_shapes1 = {
@@ -1539,7 +1539,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
             else:
                 new_stage_nums.append(
                     max_indexes[i[i_]] - max_indexes[i[i_ - 1]])
-        print("in repartition alg", new_stage_nums)
+        # print("in repartition alg", new_stage_nums)
         stage_information = get_stage_info(new_stage_nums)
         straggle_for_stage_ = calculate_straggle(
             stage_performance, stage_information)
