@@ -1544,6 +1544,8 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
             saved_stage_info_list, 0, np.zeros(saved_stage_info_list[0].shape), axis=0)
         saved_stage_info_list = np.array(saved_stage_info_list, dtype=int)
 
+        print(f'length of saved_stage_info_list :{len(saved_stage_info_list)}')
+
         # * return message
         query_stage_info_list = []
 
@@ -1566,6 +1568,7 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
 
     for i in a:
         new_stage_nums = []
+        print(i)
         for i_ in range(len(i) + 1):
             if i_ == 0:
                 new_stage_nums.append(max_indexes[i[0]])
