@@ -161,7 +161,6 @@ class StageRuntime:
 
         module_to_stage_map = configuration_maps['module_to_stage_map']
         stage_to_rank_map = configuration_maps['stage_to_rank_map']
-        self.configuration_maps = stage_to_rank_map
         stage_to_depth_map = configuration_maps['stage_to_depth_map']
 
         if module_to_stage_map is None:
@@ -407,7 +406,7 @@ class StageRuntime:
         module_to_stage_map = configuration_maps['module_to_stage_map']
         stage_to_rank_map = configuration_maps['stage_to_rank_map']
         stage_to_depth_map = configuration_maps['stage_to_depth_map']
-
+        self.configuration_maps = stage_to_rank_map
         if module_to_stage_map is None:
             # If IP addresses not specified, resort to all layers on
             # single machine.
