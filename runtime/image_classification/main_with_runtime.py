@@ -824,10 +824,10 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
                             [if_restart_mp, if_restart_dp])
                         r.i_for_initial[0] = torch.tensor([i+60])
                         print("restart")
-        pre_real = 0
-        pre_back = 0
-        time_for_recieve = 0
-        time_for_send = 0
+                pre_real = 0
+                pre_back = 0
+                time_for_recieve = 0
+                time_for_send = 0
 
     # finish remaining backward passes
     for i in range(num_warmup_minibatches):
