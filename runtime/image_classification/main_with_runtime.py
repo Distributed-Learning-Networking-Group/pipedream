@@ -476,7 +476,7 @@ def main():
 
         if args.use_dynamic and if_restart_mp:
 
-            time.sleep(30)
+            # time.sleep(30)
             result = {}
             gpuid = args.local_rank
             program = NsysProgram.from_json("program.json")
@@ -500,7 +500,7 @@ def main():
             r.Rec_Stage_nums(epoch)
             print("partition", r.stage_nums)
             model_vgg = module.model_vgg16(
-                criterion, r.stage_nums.numpy().tolist(), [0, 0])
+                criterion, r.stage_nums.numpy().tolist(), partition["recompute_ratio"])
             training_tensor_shapes1 = {
                 "input0": input_size, "target": [args.batch_size]}
             dtypes1 = {"input0": torch.float32, "target": torch.int64}
