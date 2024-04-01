@@ -1440,10 +1440,12 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
         # 计算每个阶段的结束index
         end_indices = [sum(stage_sizes[:i+1]) for i in range(len(stage_sizes))]
         return end_indices
+
     stage_index = calculate_stage_end_indices(stage_nums)
     stage_index.insert(0, 0)
     print("stage_index", stage_index)
     max_indexes = []
+
     for i in range(1, len(stage_index)):
         max_index = top_k_max_indices(
             layer_process_time, stage_index[i-1], stage_index[i], top_k)
@@ -1451,14 +1453,17 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
         max_indexes += max_index
     max_indexes.insert(0, 0)
     max_indexes.append(len(layer_forward_list))
+
     for i in range(1, len(max_indexes)-1):
         layer_forward_list_new.append(
             sum(layer_forward_list[max_indexes[i-1]:max_indexes[i]]))
         layer_backward_list_new.append(
             sum(layer_backward_list[max_indexes[i-1]:max_indexes[i]]))
+
     for i in range(1, len(max_indexes)-2):
         layer_communication_list_new.append(
             layer_communication_list[max_indexes[i]-1])
+
     if (max_indexes[-2]-1) != len(layer_forward_list)-1:
         layer_forward_list_new[-1] += sum(
             layer_forward_list[max_indexes[-2]:len(layer_forward_list)])
@@ -1521,6 +1526,9 @@ def calculate_new_placement(layer_forward_list, layer_backward_list, layer_commu
     from itertools import combinations
     record = []
     items = list(range(1, len(layer_forward_list_new)))
+    print(
+        f'a input items:{items} \nstage_num:{stage_num-1}\n layer_forward_list_new{layer_forward_list_new}')
+
     a = list(combinations(items, stage_num - 1))
     import joblib
     import numpy as np
