@@ -576,8 +576,8 @@ def main():
                   dtypes1, target_tensor_names, n_num, model_input)
 
             # # evaluate on validation set
-            # if not if_restart_mp and not if_restart_dp:
-            #     validate(val_loader, r, epoch)
+            if not if_restart_mp and not if_restart_dp:
+                validate(val_loader, r, epoch)
             # remember best prec@1 and save checkpoint
 
             # if args.checkpoint_dir and should_save_checkpoint:
