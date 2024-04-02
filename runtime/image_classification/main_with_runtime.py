@@ -862,8 +862,8 @@ def validate(val_loader, r, epoch):
     top5 = AverageMeter()
 
     # switch to evaluate mode
-    # n = r.num_iterations(loader_size=len(val_loader))
-    n = 50
+    n = r.num_iterations(loader_size=len(val_loader))
+    # n = 50
     # if args.num_minibatches is not None:
     # n = args.num_minibatches
 
