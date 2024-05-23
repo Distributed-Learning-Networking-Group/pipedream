@@ -1,9 +1,9 @@
 import json
-partition = [72, 54, 50]
-stage_to_rank_map = {'0': [0, 1, 2, 3], '1': [4, 5], '2': [6, 7]}
+partition = [120, 195, 114]
+stage_to_rank_map={'0': [0, 1, 2, 3], '1': [4, 5, 6], '2': [7]}
 batch = 72
 gpu_num = 8
-model = 'resnet50'
+model = 'densenet121'
 
 
 stage_num = len(stage_to_rank_map)
@@ -22,7 +22,7 @@ partition_config_json = json.dumps(partition_config, separators=(',', ':'))
 with open('../runtime/image_classification/models/'+model+'/gpus='+str(gpu_num)+'/hybrid_conf.json', 'w') as hybrid_conf_json_file:
     hybrid_conf_json_file.write(hybrid_conf_json)
 
-with open('../runtime/image_classification/models/'+model+'/gpus='+str(gpu_num)+'/vgg_'+str(gpu_num)+'.json', 'w') as partition_config_json_file:
+with open('../runtime/image_classification/models/'+model+'/gpus='+str(gpu_num)+'/'+model+'_'+str(gpu_num)+'.json', 'w') as partition_config_json_file:
     partition_config_json_file.write(partition_config_json)
 
 print(hybrid_conf_json)

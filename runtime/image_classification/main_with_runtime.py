@@ -82,7 +82,7 @@ parser.add_argument('--loss_scale', type=float, default=1,
                     help='static loss scale, positive power of 2 to improve fp16 convergence')
 parser.add_argument('--master_addr', default=None, type=str,
                     help="IP address of master (machine with rank 0)")
-parser.add_argument('--config_path', default=None, type=str,
+parser.add_argument('--config_path', default=None, type=str,required=True,
                     help="Path of configuration file")
 parser.add_argument('--no_input_pipelining', action='store_true',
                     help="No pipelining of inputs")
@@ -203,6 +203,9 @@ def main():
     elif 'resnet101' in args.config_path:
         model_input = module.model_resnet101(
             criterion, partition["partition"], partition["recompute_ratio"])
+    elif 'densenet121' in args.config_path:
+        model_input = module.model_densenet121(
+            criterion, partition["partition"], partition["recompute_ratio"])  
     # print("model")
     # print(model)
     # print("model_vgg")
@@ -499,14 +502,25 @@ def main():
                                                                     r.straggle_for_stage_cal, r.stage_num, r.stage_nums, 2, r.stage_performance, dp_nums))
             r.Send_Stage_nums(epoch)
             r.Rec_Stage_nums(epoch)
-            # print("partition", r.stage_nums)
-            model_vgg = module.model_vgg16(
+
+            if 'vgg16' in args.config_path:
+                    model_new_input = module.module.model_vgg16(
                 criterion, r.stage_nums.numpy().tolist(), partition["recompute_ratio"])
+            elif 'resnet50' in args.config_path:
+                    model_new_input = module.model_resnet50(
+                criterion, r.stage_nums.numpy().tolist(), partition["recompute_ratio"])
+            elif 'resnet101' in args.config_path:
+                model_new_input = module.model_resnet101(
+                criterion, r.stage_nums.numpy().tolist(), partition["recompute_ratio"])
+            elif 'densenet121' in args.config_path:
+                    model_new_input = module.model_densenet121(
+                criterion, r.stage_nums.numpy().tolist(), partition["recompute_ratio"])
+
             training_tensor_shapes1 = {
                 "input0": input_size, "target": [args.batch_size]}
             dtypes1 = {"input0": torch.float32, "target": torch.int64}
             # Skip last layer (loss).
-            for module_id, (stage, inputs, outputs) in enumerate(model_vgg[:-1]):
+            for module_id, (stage, inputs, outputs) in enumerate(model_new_input[:-1]):
                 input_tensors = []
                 for module_input in inputs:
                     if module_input in inputs_module_destinations1:
@@ -531,7 +545,7 @@ def main():
                     training_tensor_shapes1[key])
                 training_tensor_shapes1[key] = tuple(
                     training_tensor_shapes1[key])
-            r.initialize1(model_vgg, inputs_module_destinations, configuration_maps,
+            r.initialize1(model_new_input, inputs_module_destinations, configuration_maps,
                           args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server,
                           training_tensor_shapes1, dtypes1)
             torch.distributed.barrier()

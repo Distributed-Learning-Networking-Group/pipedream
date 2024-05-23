@@ -8,7 +8,7 @@ import torch.nn as nn
 import raw_profile_to_profile
 # initial 动态规划目标矩阵layers stages replicate_time gpus
 # w(layers, sum_gpus, stage_num, replicate_times)
-w = numpy.zeros((200, 10, 10, 10))
+w = numpy.zeros((500, 10, 10, 10))
 # transfer_channel = []  # perf 多机之间的带宽
 # per layer sum time compute f+b 序号从1开始
 # parameter_size = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 每层的梯度大小
@@ -22,9 +22,10 @@ GPUS_order_list = [0]  # gpu之间带宽由高到低，里面应该是gpu的id
 GPUS_bandwidth = []  # 10Gbps to MByte/s
 
 
-PIPEDREAM_FLAG = 1
-GPU_NUM = 7
+PIPEDREAM_FLAG = 0
+GPU_NUM = 8
 DIR = "profile"
+RAW_DIR="raw_profile"
 GPUS_BANDWIDTH = 886  # MByte/s
 ITER_NUM = 1000  # 测量for_bac_time时用了多少iterationa
 USING_RAW_PROFILE = True
@@ -33,7 +34,7 @@ MODEL = torchvision.models.vgg16()
 BATCH_SIZE = 16
 DEP_IDX = 2
 # USING_RAW_PROFILE=True 时起效
-MODEL_STR = 'resnet50'
+MODEL_STR = 'densenet121'
 
 
 def read_file(filename):
@@ -45,10 +46,11 @@ def read_file(filename):
 
 
 def data_init(using_raw_profile=True):
-    file_names = os.listdir(DIR)
     if using_raw_profile:
+        file_names = os.listdir(RAW_DIR)
         layers_detail = raw_profile_to_profile.raw_profile_to_profule(
             MODEL_STR).layer_profile
+        print(layers_detail)
         for index, layer in enumerate(layers_detail):
             # print(index, layers_detail[layer])
             # init DNN_per_layer_compute_time
@@ -60,6 +62,7 @@ def data_init(using_raw_profile=True):
                 layers_detail[layer][3]/8/1024/1024)  # bit to MByte
 
     else:
+        file_names = os.listdir(DIR)
         # init DNN_per_layer_compute_time
         layers_detail = model_detail.model_info(
             MODEL, batch_size=BATCH_SIZE).layers_info
