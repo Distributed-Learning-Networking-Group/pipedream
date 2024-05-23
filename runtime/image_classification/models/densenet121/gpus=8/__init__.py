@@ -12,9 +12,9 @@ from collections import OrderedDict
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 def arch():
-    return "densenet"
+    return "densenet121"
 
-class Densenet():
+class Densenet121():
     def __init__(self, declares, calculations):
         self.declares = declares
         self.calculations = calculations
@@ -169,7 +169,7 @@ def replace(inputs):
 def model_densenet121(criterion, partition, recompute_ratio):
     _declares = get_declares()
     _calculations = get_caculations()
-    module = DenseNet(_declares, _calculations)
+    module = Densenet121(_declares, _calculations)
     module.generate_layer_blocks()
     start = 0
     inputs = []
@@ -415,8 +415,8 @@ class DenseNet_orign(nn.Module):
         print(features.size(0))
         out = self.classifier(out)
         return out
-input_image = torch.randn(1, 3, 224, 224)
+# input_image = torch.randn(1, 3, 224, 224)
 
-densenet = DenseNet()
-output_tensor = densenet(input_image)
-print(output_tensor.shape)
+# densenet = DenseNet()
+# output_tensor = densenet(input_image)
+# print(output_tensor.shape)
