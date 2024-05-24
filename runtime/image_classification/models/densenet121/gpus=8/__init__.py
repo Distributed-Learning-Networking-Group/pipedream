@@ -203,8 +203,8 @@ def model_densenet121(criterion, partition, recompute_ratio):
     return ret
 
 def get_declares():
-    return '''self.layer1 = nn.Conv2d(3, num_init_features=64, kernel_size=7, stride=2, padding=3, bias=False)
-self.layer2 = nn.BatchNorm2d(num_init_features=64)
+    return '''self.layer1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+self.layer2 = nn.BatchNorm2d(64)
 self.layer3 = nn.ReLU(inplace=True)
 self.layer4 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 self.layer5 = _DenseLayer(64, 32, 4, 0)
