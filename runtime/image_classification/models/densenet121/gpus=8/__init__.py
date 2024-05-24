@@ -343,7 +343,7 @@ out64 = self.layer64(out63)
 out65 = self.layer65(out64)
 out66 = self.layer66(out65)
 out67 = self.layer67(out66)
-out68 = self.layer68(out67).view(1, -1)
+out68 = self.layer68(out67).reshape(1, -1)
 out69 = self.layer69(out68)'''
 
 class _DenseLayer(nn.Sequential):
