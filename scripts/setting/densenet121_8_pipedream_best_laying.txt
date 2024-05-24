@@ -1,0 +1,4 @@
+stage_num:3 copy_time:2
+time:0.04342965917638086
+partition = [21, 20, 28]
+stage_to_rank_map={'0': [0, 1, 2, 3], '1': [4, 5], '2': [6, 7]}

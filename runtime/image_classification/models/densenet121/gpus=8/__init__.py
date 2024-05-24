@@ -173,7 +173,7 @@ def model_densenet121(criterion, partition, recompute_ratio):
     module.generate_layer_blocks()
     start = 0
     inputs = []
-    outputs = [['out13']]
+    outputs = [['out69']]
     all_outputs = []
     declares = []
     calculations = []
@@ -203,32 +203,146 @@ def model_densenet121(criterion, partition, recompute_ratio):
     return ret
 
 def get_declares():
-    return '''self.features = nn.Sequential(OrderedDict([('conv0', nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)),('norm0', nn.BatchNorm2d(64)),('relu0', nn.ReLU(inplace=True)),('pool0', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),]))
-self.block1 = _DenseBlock(num_layers=6, num_input_features=64,bn_size=4, growth_rate=32, drop_rate=0)
-self.trans1 = _Transition(num_input_features=256, num_output_features=256 // 2)
-self.block2 = _DenseBlock(num_layers=12, num_input_features=128, bn_size=4, growth_rate=32, drop_rate=0)
-self.trans2 = _Transition(num_input_features=512, num_output_features=512 // 2)
-self.block3 = _DenseBlock(num_layers=24, num_input_features=256,bn_size=4, growth_rate=32, drop_rate=0)
-self.trans3 = _Transition(num_input_features=1024, num_output_features=1024 // 2)
-self.block4 = _DenseBlock(num_layers=16, num_input_features=512,bn_size=4, growth_rate=32, drop_rate=0)
-self.norm5 = nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-self.relu = nn.ReLU(inplace=True)
-self.avg_pool = nn.AvgPool2d(7, stride=1)
-self.classifier = nn.Linear(1024, num_classes)'''
+    return '''self.layer1 = nn.Conv2d(3, num_init_features, kernel_size=7, stride=2, padding=3, bias=False)
+self.layer2 = nn.BatchNorm2d(num_init_features)
+self.layer3 = nn.ReLU(inplace=True)
+self.layer4 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+self.layer5 = _DenseLayer(64, 32, 4, 0)
+self.layer6 = _DenseLayer(96, 32, 4, 0)
+self.layer7 = _DenseLayer(128, 32, 4, 0)
+self.layer8 = _DenseLayer(160, 32, 4, 0)
+self.layer9 = _DenseLayer(192, 32, 4, 0)
+self.layer10 = _DenseLayer(224, 32, 4, 0)
+self.layer11 = _Transition(num_input_features=256, num_output_features=256 // 2)
+self.layer12 = _DenseLayer(128, 32, 4, 0)
+self.layer13 = _DenseLayer(160, 32, 4, 0)
+self.layer14 = _DenseLayer(192, 32, 4, 0)
+self.layer15 = _DenseLayer(224, 32, 4, 0)
+self.layer16 = _DenseLayer(256, 32, 4, 0)
+self.layer17 = _DenseLayer(288, 32, 4, 0)
+self.layer18 = _DenseLayer(320, 32, 4, 0)
+self.layer19 = _DenseLayer(352, 32, 4, 0)
+self.layer20 = _DenseLayer(384, 32, 4, 0)
+self.layer21 = _DenseLayer(416, 32, 4, 0)
+self.layer22 = _DenseLayer(448, 32, 4, 0)
+self.layer23 = _DenseLayer(480, 32, 4, 0)
+self.layer24 = _Transition(num_input_features=512, num_output_features=512 // 2)
+self.layer25 = _DenseLayer(256, 32, 4, 0)
+self.layer26 = _DenseLayer(288, 32, 4, 0)
+self.layer27 = _DenseLayer(320, 32, 4, 0)
+self.layer28 = _DenseLayer(352, 32, 4, 0)
+self.layer29 = _DenseLayer(384, 32, 4, 0)
+self.layer30 = _DenseLayer(416, 32, 4, 0)
+self.layer31 = _DenseLayer(448, 32, 4, 0)
+self.layer32 = _DenseLayer(480, 32, 4, 0)
+self.layer33 = _DenseLayer(512, 32, 4, 0)
+self.layer34 = _DenseLayer(544, 32, 4, 0)
+self.layer35 = _DenseLayer(576, 32, 4, 0)
+self.layer36 = _DenseLayer(608, 32, 4, 0)
+self.layer37 = _DenseLayer(640, 32, 4, 0)
+self.layer38 = _DenseLayer(672, 32, 4, 0)
+self.layer39 = _DenseLayer(704, 32, 4, 0)
+self.layer40 = _DenseLayer(736, 32, 4, 0)
+self.layer41 = _DenseLayer(768, 32, 4, 0)
+self.layer42 = _DenseLayer(800, 32, 4, 0)
+self.layer43 = _DenseLayer(832, 32, 4, 0)
+self.layer44 = _DenseLayer(864, 32, 4, 0)
+self.layer45 = _DenseLayer(896, 32, 4, 0)
+self.layer46 = _DenseLayer(928, 32, 4, 0)
+self.layer47 = _DenseLayer(960, 32, 4, 0)
+self.layer48 = _DenseLayer(992, 32, 4, 0)
+self.layer49 = _Transition(num_input_features=1024, num_output_features=1024 // 2)
+self.layer50 = _DenseLayer(512, 32, 4, 0)
+self.layer51 = _DenseLayer(544, 32, 4, 0)
+self.layer52 = _DenseLayer(576, 32, 4, 0)
+self.layer53 = _DenseLayer(608, 32, 4, 0)
+self.layer54 = _DenseLayer(640, 32, 4, 0)
+self.layer55 = _DenseLayer(672, 32, 4, 0)
+self.layer56 = _DenseLayer(704, 32, 4, 0)
+self.layer57 = _DenseLayer(736, 32, 4, 0)
+self.layer58 = _DenseLayer(768, 32, 4, 0)
+self.layer59 = _DenseLayer(800, 32, 4, 0)
+self.layer60 = _DenseLayer(832, 32, 4, 0)
+self.layer61 = _DenseLayer(864, 32, 4, 0)
+self.layer62 = _DenseLayer(896, 32, 4, 0)
+self.layer63 = _DenseLayer(928, 32, 4, 0)
+self.layer64 = _DenseLayer(960, 32, 4, 0)
+self.layer65 = _DenseLayer(992, 32, 4, 0)
+self.layer66 = nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+self.layer67 = nn.ReLU(inplace=True)
+self.layer68 = nn.AvgPool2d(7, stride=1)
+self.layer69 = nn.Linear(1024, 10)'''
 
 def get_caculations():
-    return '''out2 = self.features(out0)
-out3 = self.block1(out2)
-out4 = self.trans1(out3)
-out5 = self.block2(out4)
-out6 = self.trans2(out5)
-out7 = self.block3(out6)
-out8 = self.trans3(out7)
-out9 = self.block4(out8)
-out10 = self.norm5(out9)
-out11 = self.relu(out10)
-out12 = self.avg_pool(out11).view(1, -1)
-out13 = self.classifier(out12)'''
+    return '''out1 = self.layer1(out0)
+out2 = self.layer2(out1)
+out3 = self.layer3(out2)
+out4 = self.layer4(out3)
+out5 = self.layer5(out4)
+out6 = self.layer6(out5)
+out7 = self.layer7(out6)
+out8 = self.layer8(out7)
+out9 = self.layer9(out8)
+out10 = self.layer10(out9)
+out11 = self.layer11(out10)
+out12 = self.layer12(out11)
+out13 = self.layer13(out12)
+out14 = self.layer14(out13)
+out15 = self.layer15(out14)
+out16 = self.layer16(out15)
+out17 = self.layer17(out16)
+out18 = self.layer18(out17)
+out19 = self.layer19(out18)
+out20 = self.layer20(out19)
+out21 = self.layer21(out20)
+out22 = self.layer22(out21)
+out23 = self.layer23(out22)
+out24 = self.layer24(out23)
+out25 = self.layer25(out24)
+out26 = self.layer26(out25)
+out27 = self.layer27(out26)
+out28 = self.layer28(out27)
+out29 = self.layer29(out28)
+out30 = self.layer30(out29)
+out31 = self.layer31(out30)
+out32 = self.layer32(out31)
+out33 = self.layer33(out32)
+out34 = self.layer34(out33)
+out35 = self.layer35(out34)
+out36 = self.layer36(out35)
+out37 = self.layer37(out36)
+out38 = self.layer38(out37)
+out39 = self.layer39(out38)
+out40 = self.layer40(out39)
+out41 = self.layer41(out40)
+out42 = self.layer42(out41)
+out43 = self.layer43(out42)
+out44 = self.layer44(out43)
+out45 = self.layer45(out44)
+out46 = self.layer46(out45)
+out47 = self.layer47(out46)
+out48 = self.layer48(out47)
+out49 = self.layer49(out48)
+out50 = self.layer50(out49)
+out51 = self.layer51(out50)
+out52 = self.layer52(out51)
+out53 = self.layer53(out52)
+out54 = self.layer54(out53)
+out55 = self.layer55(out54)
+out56 = self.layer56(out55)
+out57 = self.layer57(out56)
+out58 = self.layer58(out57)
+out59 = self.layer59(out58)
+out60 = self.layer60(out59)
+out61 = self.layer61(out60)
+out62 = self.layer62(out61)
+out63 = self.layer63(out62)
+out64 = self.layer64(out63)
+out65 = self.layer65(out64)
+out66 = self.layer66(out65)
+out67 = self.layer67(out66)
+out68 = self.layer68(out67).view(1, -1)
+out69 = self.layer69(out68)'''
 
 class _DenseLayer(nn.Sequential):
     def __init__(self, num_input_features, growth_rate, bn_size, drop_rate):
@@ -268,155 +382,9 @@ class _Transition(nn.Sequential):
         self.add_module('pool', nn.AvgPool2d(kernel_size=2, stride=2))
 
 
-class DenseNet(nn.Module):
-    r"""Densenet-BC model class, based on
-    `"Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf>`_
-
-    Args:
-        growth_rate (int) - how many filters to add each layer (`k` in paper)
-        block_config (list of 4 ints) - how many layers in each pooling block
-        num_init_features (int) - the number of filters to learn in the first convolution layer
-        bn_size (int) - multiplicative factor for number of bottle neck layers
-          (i.e. bn_size * k features in the bottleneck layer)
-        drop_rate (float) - dropout rate after each dense layer
-        num_classes (int) - number of classification classes
-    """
-
-    def __init__(self, growth_rate=32, block_config=(6, 12, 24, 16),
-                 num_init_features=64, bn_size=4, drop_rate=0, num_classes=10):
-
-        super(DenseNet, self).__init__()
-
-        # First convolution
-        self.features = nn.Sequential(OrderedDict([
-            ('conv0', nn.Conv2d(3, num_init_features, kernel_size=7, stride=2, padding=3, bias=False)),
-            ('norm0', nn.BatchNorm2d(num_init_features)),
-            ('relu0', nn.ReLU(inplace=True)),
-            ('pool0', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),
-        ]))
-
-        # Each denseblock
-        num_features = num_init_features
-        self.block1 = _DenseBlock(num_layers=6, num_input_features=64,bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
-        self.trans1 = _Transition(num_input_features=256, num_output_features=256 // 2)
-        self.block2 = _DenseBlock(num_layers=12, num_input_features=128, bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
-        self.trans2 = _Transition(num_input_features=512, num_output_features=512 // 2)
-        self.block3 = _DenseBlock(num_layers=24, num_input_features=256,bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
-        self.trans3 = _Transition(num_input_features=1024, num_output_features=1024 // 2)
-        self.block4 = _DenseBlock(num_layers=16, num_input_features=512,bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
-        self.norm5 = nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-        # Linear layer
-        num_features = 1024
-        self.classifier = nn.Linear(num_features, num_classes)
-        # ReLU layer
-        self.relu = nn.ReLU(inplace=True)
-        # Average pooling layer
-        self.avg_pool = nn.AvgPool2d(7, stride=1)
-
-        # Official init from torch repo.
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        features = self.features(x)
-        features = self.block1(features)
-        print("finish block1")
-        features = self.trans1(features)
-        print("finish trans1")
-        features = self.block2(features)
-        print("finish block2")
-        features = self.trans2(features)
-        print("finish trans2")
-        features = self.block3(features)
-        print("finish block3")
-        features = self.trans3(features)
-        print("finish trans3")
-        features = self.block4(features)
-        print("finish block4")
-        features = self.norm5(features)
-        print("finish norm5",features.shape)
-        out = self.relu(features)
-        print("finish relu")
-        out = self.avg_pool(out).view(1, -1)
-        print("finish avg")
-        out = self.classifier(out)
-        return out
-class DenseNet_orign(nn.Module):
-    r"""Densenet-BC model class, based on
-    `"Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf>`_
-
-    Args:
-        growth_rate (int) - how many filters to add each layer (`k` in paper)
-        block_config (list of 4 ints) - how many layers in each pooling block
-        num_init_features (int) - the number of filters to learn in the first convolution layer
-        bn_size (int) - multiplicative factor for number of bottle neck layers
-          (i.e. bn_size * k features in the bottleneck layer)
-        drop_rate (float) - dropout rate after each dense layer
-        num_classes (int) - number of classification classes
-    """
-
-    def __init__(self, growth_rate=32, block_config=(6, 12, 24, 16),
-                 num_init_features=64, bn_size=4, drop_rate=0, num_classes=10):
-
-        super(DenseNet_orign, self).__init__()
-
-        # First convolution
-        self.features = nn.Sequential(OrderedDict([
-            ('conv0', nn.Conv2d(3, num_init_features, kernel_size=7, stride=2, padding=3, bias=False)),
-            ('norm0', nn.BatchNorm2d(num_init_features)),
-            ('relu0', nn.ReLU(inplace=True)),
-            ('pool0', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),
-        ]))
-
-        # Each denseblock
-        num_features = num_init_features
-        for i, num_layers in enumerate(block_config):
-            block = _DenseBlock(num_layers=num_layers, num_input_features=num_features,
-                                bn_size=bn_size, growth_rate=growth_rate, drop_rate=drop_rate)
-            self.features.add_module('denseblock%d' % (i + 1), block)
-            num_features = num_features + num_layers * growth_rate
-            if i != len(block_config) - 1:
-                trans = _Transition(num_input_features=num_features, num_output_features=num_features // 2)
-                self.features.add_module('transition%d' % (i + 1), trans)
-                num_features = num_features // 2
-
-        # Final batch norm
-        self.features.add_module('norm5', nn.BatchNorm2d(num_features))
-        # Linear layer
-        print("classifier",num_features)
-        self.classifier = nn.Linear(num_features, num_classes)
-        # ReLU layer
-        self.relu = nn.ReLU(inplace=True)
-        # Average pooling layer
-        self.avg_pool = nn.AvgPool2d(7, stride=1)
-
-        # Official init from torch repo.
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        features = self.features(x)
-        print(features.shape)
-        out = self.relu(features)
-        print(out.shape)
-        out = self.avg_pool(out).view(features.size(0), -1)
-        print(features.size(0))
-        out = self.classifier(out)
-        return out
+   
 # input_image = torch.randn(1, 3, 224, 224)
 
-# densenet = DenseNet()
+# densenet = DenseNet_()
 # output_tensor = densenet(input_image)
 # print(output_tensor.shape)
