@@ -1,1 +1,1 @@
-{"partition":[5,8,4,3,2,16],"recompute_ratio":[0,0,0,0,0,0],"batch_size_all":[72],"batch_size":[36,36,72,72,72,72]}
+{"partition":[10,7,5,10,6],"recompute_ratio":[0,0,0,0,0],"batch_size_all":[72],"batch_size":[24,72,72,72,36]}
