@@ -278,7 +278,6 @@ def main():
             input_tensors.append(input_tensor)
         with torch.no_grad():
             output_tensors = stage(*tuple(input_tensors))
-            print(output_tensors.shape)
         if not type(output_tensors) is tuple:
             output_tensors = [output_tensors]
         for output, output_tensor in zip(outputs,
