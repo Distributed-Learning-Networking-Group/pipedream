@@ -175,7 +175,7 @@ def model_densenet121(criterion, partition, recompute_ratio):
     module.generate_layer_blocks()
     start = 0
     inputs = []
-    outputs = [['out69']]
+    outputs = [['out68']]
     all_outputs = []
     declares = []
     calculations = []
@@ -272,8 +272,7 @@ self.layer64 = _DenseLayer(960, 32, 4, 0)
 self.layer65 = _DenseLayer(992, 32, 4, 0)
 self.layer66 = nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
 self.layer67 = nn.ReLU(inplace=True)
-self.layer68 = nn.AvgPool2d(7, stride=1)
-self.layer69 = nn.Linear(1024, 10, bias=True)'''
+self.layer68 = nn.AvgPool2d(7, stride=1)'''
 
 def get_caculations():
     return '''out1 = self.layer1(out0)
@@ -343,8 +342,7 @@ out64 = self.layer64(out63)
 out65 = self.layer65(out64)
 out66 = self.layer66(out65)
 out67 = self.layer67(out66)
-out68 = self.layer68(out67).view(1, -1)
-out69 = self.layer69(out68)'''
+out68 = self.layer68(out67).view(1, -1)'''
 
 class _DenseLayer(nn.Sequential):
     def __init__(self, num_input_features, growth_rate, bn_size, drop_rate):
