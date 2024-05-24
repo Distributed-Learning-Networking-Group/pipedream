@@ -138,8 +138,7 @@ class Stage(torch.nn.Module):
             self.no_cp = '\n'.join(no_cp_)
 
     def forward(self, *args):
-        print(self.no_cp)
-        print()
+
         exec(self.no_cp)
         return self.out
 
