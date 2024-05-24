@@ -62,7 +62,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N', help='mini-batch size (default: 16)')
-parser.add_argument('--eval-batch-size', default=100, type=int,
+parser.add_argument('--eval-batch-size', default=10, type=int,
                     help='eval mini-batch size (default: 100)')
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate')
@@ -877,7 +877,7 @@ def validate(val_loader, r, epoch):
 
     # switch to evaluate mode
     n = r.num_iterations(loader_size=len(val_loader))
-    n = 25
+    n = 100
     # if args.num_minibatches is not None:
     # n = args.num_minibatches
 
