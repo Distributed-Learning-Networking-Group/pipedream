@@ -621,8 +621,14 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
     flag_if_transfer = False
     flag_if_recv = False
     flag_if_save = False
+
+
     # switch to train mode
-    n = r.num_iterations(loader_size=len(train_loader))
+    each_stage_rank_num=[]
+    for each_stage_rank in configuration_maps['stage_to_rank_map']:
+        each_stage_rank_num.append(len(each_stage_rank))
+
+    n = r.num_iterations(loader_size=len(train_loader)) // max(each_stage_rank)
     # n = 1000
     if args.num_minibatches is not None:
         n = args.num_minibatches
