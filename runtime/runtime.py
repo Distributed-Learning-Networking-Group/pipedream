@@ -1127,6 +1127,7 @@ class StageRuntime:
         # print(self.num_ranks_in_stage)
         # print("loader_size")
         # print(loader_size)
+        return loader_size
         if self.stage == 0 or self.stage is None:
             return loader_size
 
