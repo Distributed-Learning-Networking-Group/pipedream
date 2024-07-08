@@ -585,6 +585,7 @@ def main():
             r.restart_type[1] = False
             if_restart_mp = False
             r.restart_type[0] = False
+            print(f"main_with_runtime train_loader{len(train_loader)}")
             train(train_loader, r, optimizer, epoch, inputs_module_destinations, configuration_maps,
                   args.master_addr, args.rank, args.local_rank, args.num_ranks_in_server, training_tensor_shapes1,
                   dtypes1, target_tensor_names, n_num, model_input)
