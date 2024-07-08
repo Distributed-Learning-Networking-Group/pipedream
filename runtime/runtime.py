@@ -1119,6 +1119,8 @@ class StageRuntime:
 
         TODO: don't currently support uneven configurations.
         """
+        print("self.stage")
+        print(self.stage)
         print("self.num_ranks_in_first_stage")
         print(self.num_ranks_in_first_stage)
         print("num_ranks_in_stage")
