@@ -876,8 +876,8 @@ def validate(val_loader, r, epoch):
 
     # switch to evaluate mode
     n = r.num_iterations(loader_size=len(val_loader))
-    if args.num_minibatches is not None:
-        n = args.num_minibatches
+    if args.eval_batch_size is not None:
+        n = args.eval_batch_size
 
     r.eval(n, epoch)
     if not is_first_stage():
