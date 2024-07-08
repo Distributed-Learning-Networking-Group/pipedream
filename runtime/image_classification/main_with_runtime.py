@@ -454,7 +454,7 @@ def main():
             distributed_sampler = True
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(
+        train_dataset, batch_size=max(partition["batch_size"]), shuffle=(
             train_sampler is None),
         num_workers=4, pin_memory=True, sampler=train_sampler, drop_last=True)
     val_loader = torch.utils.data.DataLoader(
