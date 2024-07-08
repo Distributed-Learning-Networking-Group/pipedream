@@ -1119,13 +1119,18 @@ class StageRuntime:
 
         TODO: don't currently support uneven configurations.
         """
-        return loader_size
-        # if self.stage == 0 or self.stage is None:
-        #     return loader_size
-        # num_iterations = loader_size * self.num_ranks_in_first_stage
-        # assert num_iterations % self.num_ranks_in_stage == 0
-        # num_iterations = num_iterations // self.num_ranks_in_stage
-        # return num_iterations
+        # print("self.num_ranks_in_first_stage")
+        # print(self.num_ranks_in_first_stage)
+        # print("num_ranks_in_stage")
+        # print(self.num_ranks_in_stage)
+        if self.stage == 0 or self.stage is None:
+            return loader_size
+
+        num_iterations = loader_size * self.num_ranks_in_first_stage
+        assert num_iterations % self.num_ranks_in_stage == 0
+        num_iterations = num_iterations // self.num_ranks_in_stage
+
+        return num_iterations
 
     def get_adjusted_learning_rate(self, base_lr):
 
