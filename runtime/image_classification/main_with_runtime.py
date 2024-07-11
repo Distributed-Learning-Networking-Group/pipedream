@@ -60,11 +60,11 @@ parser.add_argument('--epochs', default=500, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=16, type=int,
+parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N', help='mini-batch size (default: 16)')
-parser.add_argument('--eval-batch-size', default=10, type=int,
+parser.add_argument('--eval-batch-size', default=100, type=int,
                     help='eval mini-batch size (default: 100)')
-parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--lr_policy', default='step', type=str,
                     help='policy for controlling learning rate')
@@ -168,7 +168,6 @@ all_ranks = [0, 1, 2, 3, 4, 5, 6, 7]
 mp_ranks = [0, 1, 2, 3, 4, 5, 6, 7]
 dp_ranks = []
 dp_nums = []
-# 1111
 
 
 def main():
@@ -628,7 +627,7 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
     for key in configuration_maps['stage_to_rank_map']:
         each_stage_rank_num.append(len(configuration_maps['stage_to_rank_map'][key]))
 
-    n = r.num_iterations(loader_size=len(train_loader)) // max(each_stage_rank_num)
+    n = r.num_iterations(loader_size=len(train_loader)) #// max(each_stage_rank_num)
     # n = 1000
     if args.num_minibatches is not None:
         n = args.num_minibatches
@@ -699,8 +698,8 @@ def train(train_loader, r, optimizer, epoch, inputs_module_destinations, configu
             r.run_forward(stopped=True)
         else:
             r.run_forward()
-        # adjust_learning_rate(optimizer, epoch, args.epochs,
-        #                      r, args.lr_policy, i, n)
+        adjust_learning_rate(optimizer, epoch, args.epochs,
+                             r, args.lr_policy, i, n)
         if is_last_stage():
             # measure accuracy and record loss
             output, target, loss = r.output, r.target, r.loss
@@ -1024,7 +1023,7 @@ def adjust_learning_rate(optimizer, epoch, total_epochs, r, lr_policy, step, epo
 
     else:
         if lr_policy == "step":
-            lr = stage_base_lr * (0.4 ** (epoch // 10))
+            lr = stage_base_lr * (0.1 ** (epoch // 30))
         elif lr_policy == "polynomial":
             power = 2.0
             lr = stage_base_lr * \
