@@ -1034,15 +1034,15 @@ class StageRuntime:
         # Hook to record input gradients.
         def hook_wrapper(input_name):
             def hook(input_gradient):
-                input_gradients[input_name] = input_gradient
+                input_gradients[input_name] = input_gradient*self.loss_scale
             return hook
 
         for input_name in inputs:
             if input_name != "input0" and input_name != "input1" and input_name != "input2" \
                     and inputs[input_name].requires_grad:
                 inputs[input_name].register_hook(hook_wrapper(input_name))
-        for key in outputs.keys():
-            outputs[key] *=self.loss_scale
+        # for key in outputs.keys():
+        #     outputs[key] *=self.loss_scale
         # if "loss" in outputs:
         #     print(f'loss_scale :{self.loss_scale}')
         #     outputs["loss"] *= self.loss_scale
