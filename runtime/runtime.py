@@ -853,7 +853,7 @@ class StageRuntime:
                      forward_minibatch_id=self.forward_minibatch_id,
                      backward_minibatch_id=self.backward_minibatch_id,
                      backward=True,
-                     stopped=stopped)
+                     stopped=stopped) *self.loss_scale
              # print("recv tensors backward",self.stage,output_name,self.gradients[output_name])
              self.backward_stats.stats['receive_tensors_size'] += \
                  (self.gradients[output_name].element_size() *
@@ -1034,7 +1034,7 @@ class StageRuntime:
         # Hook to record input gradients.
         def hook_wrapper(input_name):
             def hook(input_gradient):
-                input_gradients[input_name] = input_gradient*self.loss_scale
+                input_gradients[input_name] = input_gradient
             return hook
 
         for input_name in inputs:
