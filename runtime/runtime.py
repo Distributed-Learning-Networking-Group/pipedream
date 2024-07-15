@@ -853,7 +853,7 @@ class StageRuntime:
                      forward_minibatch_id=self.forward_minibatch_id,
                      backward_minibatch_id=self.backward_minibatch_id,
                      backward=True,
-                     stopped=stopped) *self.loss_scale
+                     stopped=stopped) *(1/self.loss_scale)
              # print("recv tensors backward",self.stage,output_name,self.gradients[output_name])
              self.backward_stats.stats['receive_tensors_size'] += \
                  (self.gradients[output_name].element_size() *
