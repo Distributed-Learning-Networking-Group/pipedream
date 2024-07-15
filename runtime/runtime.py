@@ -1041,9 +1041,11 @@ class StageRuntime:
             if input_name != "input0" and input_name != "input1" and input_name != "input2" \
                     and inputs[input_name].requires_grad:
                 inputs[input_name].register_hook(hook_wrapper(input_name))
-
-        if "loss" in outputs:
-            outputs["loss"] *= self.loss_scale
+        for key in outputs.keys():
+            outputs[key] *=self.loss_scale
+        # if "loss" in outputs:
+        #     print(f'loss_scale :{self.loss_scale}')
+        #     outputs["loss"] *= self.loss_scale
         # print("begin backward outputs", tuple([outputs[output_name] for output_name in outputs]))
         # print("begin backward output_gradient", tuple([output_gradients[output_name] for output_name in outputs]))
         # for input_name in inputs:
